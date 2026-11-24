@@ -1,0 +1,39 @@
+{
+  "name": "ielts-writing-classroom",
+  "version": "1.0.0",
+  "description": "IELTS Academic Writing Task 1 Classroom Web Application",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "build": "cd client && npm install && npm run build",
+    "build:client": "cd client && npm run build",
+    "test": "node test/test-all-14-scenarios.js && node test/test-suite.js",
+    "test:14": "node test/test-all-14-scenarios.js",
+    "test:regression": "node test/test-suite.js"
+  },
+  "keywords": [
+    "ielts",
+    "writing",
+    "task1",
+    "classroom",
+    "education"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.109.0",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "docx": "^9.15.3",
+    "dotenv": "^17.2.4",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "jszip": "^3.10.2",
+    "multer": "^2.0.2",
+    "pg": "^8.23.1",
+    "qrcode": "^1.5.4",
+    "sql.js": "^1.14.1",
+    "uuid": "^13.0.0",
+    "xlsx": "^0.18.5"
+  }
+}

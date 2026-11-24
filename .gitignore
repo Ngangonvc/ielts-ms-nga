@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+client/node_modules/
+
+# Environment Variables (Never commit secrets)
+.env
+.env.local
+.env.production
+
+# Backups and temporary files
+data_backups/
+data/*.tmp
+data/*.bak
+data/*_pre_cloud.db
+
+# Binaries and tooling
+bin/cloudflared.exe
+tools/
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
