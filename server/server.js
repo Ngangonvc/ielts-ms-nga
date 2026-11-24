@@ -644,12 +644,13 @@ app.post('/api/students/import', authenticateTeacher, uploadExcel.single('file')
 // ==========================================
 
 app.get('/api/assignments', authenticateTeacher, (req, res) => {
-  const { classId, taskType, type } = req.query;
+  const { classId, taskType, type, status } = req.query;
   const selectedType = (taskType || type || '').toUpperCase();
   let sql = `
     SELECT a.*, c.name as class_name,
       (SELECT COUNT(*) FROM attempts att WHERE att.assignment_id = a.id) as attempt_count,
-      (SELECT COUNT(*) FROM attempts att WHERE att.assignment_id = a.id AND att.status = 'SUBMITTED') as submitted_count
+      (SELECT COUNT(*) FROM attempts att WHERE att.assignment_id = a.id AND att.status = 'SUBMITTED') as submitted_count,
+      (SELECT COUNT(*) FROM attempts att WHERE att.assignment_id = a.id AND att.status = 'IN_PROGRESS') as active_attempt_count
     FROM assignments a
     JOIN classes c ON a.class_id = c.id
     WHERE 1=1
@@ -662,6 +663,10 @@ app.get('/api/assignments', authenticateTeacher, (req, res) => {
   if (selectedType) {
     sql += ' AND (a.type = ? OR a.task_type = ?)';
     params.push(selectedType, selectedType);
+  }
+  if (status) {
+    sql += ' AND a.status = ?';
+    params.push(status);
   }
   sql += ' ORDER BY a.created_at DESC';
   const assignments = query(sql, params).map(a => ({
@@ -827,14 +832,97 @@ app.put('/api/assignments/:id', authenticateTeacher, upload.array('images', 5), 
   }
 });
 
-// Update assignment status (DRAFT / PUBLISHED / CLOSED)
+// Update assignment status (DRAFT / PUBLISHED / CLOSED / ARCHIVED)
 app.post('/api/assignments/:id/status', authenticateTeacher, (req, res) => {
   const { status } = req.body || {};
-  if (!['DRAFT', 'PUBLISHED', 'CLOSED'].includes(status)) {
+  if (!['DRAFT', 'PUBLISHED', 'CLOSED', 'ARCHIVED'].includes(status)) {
     return res.status(400).json({ error: 'Trạng thái không hợp lệ' });
   }
   run('UPDATE assignments SET status = ? WHERE id = ?', [status, req.params.id]);
   res.json({ success: true, status });
+});
+
+// Delete assignment / exam (Xóa đề thi)
+app.delete('/api/assignments/:id', authenticateTeacher, (req, res) => {
+  try {
+    const existing = get('SELECT * FROM assignments WHERE id = ?', [req.params.id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Không tìm thấy đề thi cần xóa' });
+    }
+
+    // Safeguard: Check if students are currently taking the exam (IN_PROGRESS)
+    const active = get(
+      "SELECT COUNT(*) as count FROM attempts WHERE assignment_id = ? AND status = 'IN_PROGRESS'",
+      [req.params.id]
+    );
+    if (active && active.count > 0) {
+      return res.status(400).json({
+        error: `Không thể xóa đề thi vì hiện đang có ${active.count} học sinh đang trong giờ làm bài thi!`
+      });
+    }
+
+    // Cascade delete related records cleanly
+    const attempts = query('SELECT id FROM attempts WHERE assignment_id = ?', [req.params.id]);
+    for (const att of attempts) {
+      run('DELETE FROM scores WHERE attempt_id = ?', [att.id]);
+      run('DELETE FROM violation_logs WHERE attempt_id = ?', [att.id]);
+      run('DELETE FROM teacher_overrides WHERE attempt_id = ?', [att.id]);
+    }
+    run('DELETE FROM attempts WHERE assignment_id = ?', [req.params.id]);
+    run('DELETE FROM assignments WHERE id = ?', [req.params.id]);
+
+    res.json({
+      success: true,
+      id: req.params.id,
+      message: `Đã xóa vĩnh viễn đề thi "${existing.title}" cùng toàn bộ dữ liệu liên quan thành công`
+    });
+  } catch (err) {
+    console.error('Delete assignment error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Archive assignment / exam (Lưu trữ đề thi)
+app.post('/api/assignments/:id/archive', authenticateTeacher, (req, res) => {
+  try {
+    const existing = get('SELECT * FROM assignments WHERE id = ?', [req.params.id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Không tìm thấy đề thi cần lưu trữ' });
+    }
+
+    run("UPDATE assignments SET status = 'ARCHIVED' WHERE id = ?", [req.params.id]);
+    res.json({
+      success: true,
+      id: req.params.id,
+      status: 'ARCHIVED',
+      message: `Đã lưu trữ đề thi "${existing.title}" thành công`
+    });
+  } catch (err) {
+    console.error('Archive assignment error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Restore archived assignment / exam (Khôi phục đề thi đã lưu trữ)
+app.post('/api/assignments/:id/restore', authenticateTeacher, (req, res) => {
+  try {
+    const existing = get('SELECT * FROM assignments WHERE id = ?', [req.params.id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Không tìm thấy đề thi cần khôi phục' });
+    }
+
+    // Restored exam defaults to CLOSED status
+    run("UPDATE assignments SET status = 'CLOSED' WHERE id = ?", [req.params.id]);
+    res.json({
+      success: true,
+      id: req.params.id,
+      status: 'CLOSED',
+      message: `Đã khôi phục đề thi "${existing.title}" về trạng thái Đã đóng`
+    });
+  } catch (err) {
+    console.error('Restore assignment error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Duplicate assignment / exam
@@ -1076,6 +1164,9 @@ app.get('/api/exam/:id/public', (req, res) => {
     if (!assignment) {
       return res.status(404).json({ error: 'Không tìm thấy đề thi hoặc link không hợp lệ' });
     }
+    if (assignment.status === 'ARCHIVED') {
+      return res.status(403).json({ error: 'Đề thi này đã được lưu trữ và không còn mở cho học sinh.' });
+    }
 
     const classes = query('SELECT id, name FROM classes ORDER BY name ASC');
     const assignedClass = get('SELECT id, name FROM classes WHERE id = ?', [assignment.class_id]);
@@ -1123,7 +1214,9 @@ app.post('/api/exam/:id/start-direct', async (req, res) => {
     if (!assignment) {
       return res.status(404).json({ error: 'Không tìm thấy đề thi' });
     }
-
+    if (assignment.status === 'ARCHIVED') {
+      return res.status(403).json({ error: 'Đề thi này đã được lưu trữ và không còn mở cho học sinh.' });
+    }
     if (assignment.status === 'CLOSED') {
       return res.status(400).json({ error: 'Buổi thi này đã được giáo viên đóng lại' });
     }

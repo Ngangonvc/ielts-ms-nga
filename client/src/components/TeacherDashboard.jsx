@@ -39,7 +39,10 @@ import {
   Share2,
   ChevronDown,
   ChevronUp,
-  Activity
+  Activity,
+  Trash2,
+  Archive,
+  RotateCcw
 } from 'lucide-react';
 
 function formatTimeSpent(seconds) {
@@ -66,8 +69,15 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
   const [submissionFilterStatus, setSubmissionFilterStatus] = useState('');
   const [selectedTaskType, setSelectedTaskType] = useState(''); // '' | 'TASK_1' | 'TASK_2'
 
-  // Filter for exam list
-  const [examFilterTask, setExamFilterTask] = useState('ALL'); // 'ALL' | 'TASK_1' | 'TASK_2'
+  // Filter for exam list: 'ALL' | 'TASK_1' | 'TASK_2' | 'PUBLISHED' | 'CLOSED' | 'DRAFT' | 'ARCHIVED'
+  const [examFilterTask, setExamFilterTask] = useState('ALL');
+
+  // Delete & Archive Exam Modals
+  const [examToDelete, setExamToDelete] = useState(null);
+  const [deleteConfirmWarningChecked, setDeleteConfirmWarningChecked] = useState(false);
+  const [isDeletingExam, setIsDeletingExam] = useState(false);
+  const [examToArchive, setExamToArchive] = useState(null);
+  const [isArchivingExam, setIsArchivingExam] = useState(false);
 
   // Create Writing Session Form
   const [newTaskType, setNewTaskType] = useState('TASK_1'); // 'TASK_1' | 'TASK_2'
@@ -289,6 +299,72 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
       showNotification('error', 'Lỗi nhân bản đề thi: ' + err.message);
     } finally {
       setDuplicatingId(null);
+    }
+  }
+
+  function handleOpenDeleteModal(assign) {
+    setExamToDelete(assign);
+    setDeleteConfirmWarningChecked(false);
+  }
+
+  async function handleConfirmDeleteExam() {
+    if (!examToDelete) return;
+    if (examToDelete.active_attempt_count > 0) {
+      showNotification('error', `Không thể xóa đề thi vì hiện đang có ${examToDelete.active_attempt_count} học sinh đang trong giờ làm bài!`);
+      return;
+    }
+    const hasSubmissions = (examToDelete.submitted_count || 0) > 0 || (examToDelete.attempt_count || 0) > 0;
+    if (hasSubmissions && !deleteConfirmWarningChecked) {
+      showNotification('warning', 'Vui lòng tích chọn xác nhận đã hiểu rõ rủi ro trước khi thực hiện xóa!');
+      return;
+    }
+
+    setIsDeletingExam(true);
+    try {
+      const res = await apiRequest(`/assignments/${examToDelete.id}`, 'DELETE');
+      showNotification('success', res?.message || `Đã xóa vĩnh viễn đề thi "${examToDelete.title}" thành công!`);
+      setExamToDelete(null);
+      await loadAssignments();
+      await loadSubmissions();
+    } catch (err) {
+      showNotification('error', 'Lỗi khi xóa đề thi: ' + err.message);
+    } finally {
+      setIsDeletingExam(false);
+    }
+  }
+
+  function handleOpenArchiveModal(assign) {
+    if (!assign) return;
+    if (assign.active_attempt_count > 0) {
+      showNotification('warning', `Đề thi hiện có ${assign.active_attempt_count} học sinh đang làm bài. Vui lòng đóng đề hoặc chờ học sinh hoàn thành trước khi lưu trữ.`);
+      return;
+    }
+    setExamToArchive(assign);
+  }
+
+  async function handleConfirmArchiveExam() {
+    if (!examToArchive) return;
+    setIsArchivingExam(true);
+    try {
+      const res = await apiRequest(`/assignments/${examToArchive.id}/archive`, 'POST');
+      showNotification('success', res?.message || `Đã lưu trữ đề thi "${examToArchive.title}" thành công!`);
+      setExamToArchive(null);
+      await loadAssignments();
+    } catch (err) {
+      showNotification('error', 'Lỗi khi lưu trữ đề thi: ' + err.message);
+    } finally {
+      setIsArchivingExam(false);
+    }
+  }
+
+  async function handleRestoreExam(assign) {
+    if (!assign) return;
+    try {
+      const res = await apiRequest(`/assignments/${assign.id}/restore`, 'POST');
+      showNotification('success', res?.message || `Đã khôi phục đề thi "${assign.title}" về trạng thái Đã đóng!`);
+      await loadAssignments();
+    } catch (err) {
+      showNotification('error', 'Lỗi khi khôi phục đề thi: ' + err.message);
     }
   }
 
@@ -1028,217 +1104,367 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
 
         {/* Writing Sessions List */}
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="font-extrabold text-slate-900 text-sm sm:text-base flex items-center gap-2">
-              <span>Danh Sách Các Đề Thi Writing ({assignments.length})</span>
-            </h3>
+          {(() => {
+            const nonArchivedExams = assignments.filter((a) => a.status !== 'ARCHIVED');
+            const countAll = nonArchivedExams.length;
+            const countTask1 = nonArchivedExams.filter((a) => (a.type || a.task_type) !== 'TASK_2').length;
+            const countTask2 = nonArchivedExams.filter((a) => (a.type || a.task_type) === 'TASK_2').length;
+            const countPublished = assignments.filter((a) => a.status === 'PUBLISHED').length;
+            const countClosed = assignments.filter((a) => a.status === 'CLOSED').length;
+            const countDraft = assignments.filter((a) => a.status === 'DRAFT').length;
+            const countArchived = assignments.filter((a) => a.status === 'ARCHIVED').length;
 
-            {/* Filter pills: All, Task 1, Task 2 */}
-            <div className="inline-flex p-1 bg-slate-100 rounded-xl text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => setExamFilterTask('ALL')}
-                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                  examFilterTask === 'ALL'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Tất cả ({assignments.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setExamFilterTask('TASK_1')}
-                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                  examFilterTask === 'TASK_1'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-blue-700'
-                }`}
-              >
-                📊 Task 1 ({assignments.filter((a) => (a.type || a.task_type) !== 'TASK_2').length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setExamFilterTask('TASK_2')}
-                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                  examFilterTask === 'TASK_2'
-                    ? 'bg-purple-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-purple-700'
-                }`}
-              >
-                📝 Task 2 ({assignments.filter((a) => (a.type || a.task_type) === 'TASK_2').length})
-              </button>
-            </div>
-          </div>
+            const displayedExams = assignments.filter((a) => {
+              const isT2 = (a.type || a.task_type) === 'TASK_2';
+              if (examFilterTask === 'ALL') return a.status !== 'ARCHIVED';
+              if (examFilterTask === 'TASK_1') return a.status !== 'ARCHIVED' && !isT2;
+              if (examFilterTask === 'TASK_2') return a.status !== 'ARCHIVED' && isT2;
+              if (examFilterTask === 'PUBLISHED') return a.status === 'PUBLISHED';
+              if (examFilterTask === 'CLOSED') return a.status === 'CLOSED';
+              if (examFilterTask === 'DRAFT') return a.status === 'DRAFT';
+              if (examFilterTask === 'ARCHIVED') return a.status === 'ARCHIVED';
+              return a.status !== 'ARCHIVED';
+            });
 
-          {assignments.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 text-slate-400 text-sm">
-              Chưa có buổi thi nào. Hãy nhập tên đề bài và bấm "Bắt đầu thi" ở trên.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {assignments
-                .filter((a) => {
-                  const isT2 = (a.type || a.task_type) === 'TASK_2';
-                  if (examFilterTask === 'TASK_1') return !isT2;
-                  if (examFilterTask === 'TASK_2') return isT2;
-                  return true;
-                })
-                .map((assign) => {
-                const isTask2 = (assign.type || assign.task_type) === 'TASK_2';
-                const isOpen = assign.status === 'PUBLISHED';
-                const isCopied = copiedExamId === assign.id;
-                const isDuplicating = duplicatingId === assign.id;
+            return (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="font-extrabold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                    <span>
+                      {examFilterTask === 'ARCHIVED'
+                        ? `Đề Thi Đã Lưu Trữ (${countArchived})`
+                        : `Danh Sách Các Đề Thi Writing (${countAll})`}
+                    </span>
+                  </h3>
 
-                return (
-                  <div
-                    key={assign.id}
-                    className={`bg-white rounded-2xl p-5 border shadow-xs flex flex-col justify-between gap-4 transition-all ${
-                      isOpen
-                        ? isTask2 ? 'border-purple-300 ring-2 ring-purple-100/70' : 'border-blue-300 ring-2 ring-blue-100/70'
-                        : 'border-slate-200'
-                    }`}
-                  >
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md border ${
-                            isTask2
-                              ? 'text-purple-800 bg-purple-50 border-purple-200'
-                              : 'text-blue-800 bg-blue-50 border-blue-200'
-                          }`}>
-                            {isTask2 ? 'Task 2 • 40m' : 'Task 1 • 20m'}
-                          </span>
-                          <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
-                            {getCategoryLabelClient(assign.type || assign.task_type, assign.task_category)}
-                          </span>
-                        </div>
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                            isOpen
-                              ? 'bg-green-100 text-green-800'
-                              : assign.status === 'CLOSED'
-                              ? 'bg-slate-200 text-slate-600'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {isOpen ? 'Đang mở' : assign.status === 'CLOSED' ? 'Đã đóng' : 'Bản nháp'}
-                        </span>
-                      </div>
-
-                      <h4 className="text-base font-bold text-slate-900 line-clamp-2 leading-snug">
-                        {assign.title}
-                      </h4>
-
-                      <div className="flex items-center justify-between text-xs text-slate-500 pt-0.5">
-                        <span>Lớp: <strong className="text-slate-700">{assign.class_name}</strong></span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5 text-blue-600" /> {assign.duration_minutes} phút
-                        </span>
-                      </div>
-
-                      <div className="text-xs text-slate-500 flex items-center justify-between">
-                        <span>
-                          Bài nộp: <strong className="text-green-700">{assign.submitted_count || 0}</strong> / {assign.attempt_count || 0}
-                        </span>
-                        {assign.image_urls && assign.image_urls.length > 0 && (
-                          <span className="text-[11px] text-blue-600 flex items-center gap-1">
-                            <ImageIcon className="w-3 h-3" /> {assign.image_urls.length} biểu đồ
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Action Buttons for each exam */}
-                    <div className="pt-3 border-t border-slate-100 space-y-2">
-                      <div className="flex items-center gap-2">
-                        {/* Copy Exam Link Button */}
-                        <button
-                          type="button"
-                          onClick={() => handleCopyExamLink(assign)}
-                          className={`flex-1 py-1.5 px-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                            isCopied
-                              ? 'bg-green-600 text-white'
-                              : 'bg-blue-50 hover:bg-blue-100 text-blue-700'
-                          }`}
-                          title="Sao chép link trực tiếp gửi cho học sinh"
-                        >
-                          {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                          <span>{isCopied ? 'Đã copy link thi!' : 'Sao chép link thi'}</span>
-                        </button>
-
-                        {/* Duplicate Button */}
-                        <button
-                          type="button"
-                          disabled={isDuplicating}
-                          onClick={() => handleDuplicateExam(assign)}
-                          className="py-1.5 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                          title="Nhân bản đề thi này cho lớp khác"
-                        >
-                          {isDuplicating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
-                          <span>Nhân bản</span>
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {!isOpen ? (
-                          <button
-                            type="button"
-                            onClick={() => handleStartExistingSession(assign)}
-                            className="flex-1 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-                          >
-                            <Play className="w-3.5 h-3.5" />
-                            <span>Mở phòng thi</span>
-                          </button>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => openSessionQrModal(assign.id, assign.title)}
-                              className="flex-1 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-                            >
-                              <QrCode className="w-3.5 h-3.5" />
-                              <span>Mã QR & Link</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleCloseExistingSession(assign)}
-                              className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
-                            >
-                              Đóng
-                            </button>
-                          </>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditModal(assign)}
-                          className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
-                          title="Chỉnh sửa đề thi"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedClassId(assign.class_id);
-                            setSelectedAssignmentId(assign.id);
-                            setSubmissionFilterStatus('');
-                            setActiveTab('submissions');
-                          }}
-                          className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
-                          title="Xem danh sách bài viết của đề này"
-                        >
-                          Xem bài
-                        </button>
-                      </div>
-                    </div>
+                  {/* Filter pills: All, Task 1, Task 2, Published, Closed, Draft, Archived */}
+                  <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setExamFilterTask('ALL')}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        examFilterTask === 'ALL'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Tất cả ({countAll})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExamFilterTask('TASK_1')}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        examFilterTask === 'TASK_1'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-blue-700'
+                      }`}
+                    >
+                      📊 Task 1 ({countTask1})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExamFilterTask('TASK_2')}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        examFilterTask === 'TASK_2'
+                          ? 'bg-purple-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-purple-700'
+                      }`}
+                    >
+                      📝 Task 2 ({countTask2})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExamFilterTask('PUBLISHED')}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        examFilterTask === 'PUBLISHED'
+                          ? 'bg-green-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-green-700'
+                      }`}
+                    >
+                      🟢 Đang mở ({countPublished})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExamFilterTask('CLOSED')}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        examFilterTask === 'CLOSED'
+                          ? 'bg-slate-700 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      ⚪ Đã đóng ({countClosed})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExamFilterTask('DRAFT')}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        examFilterTask === 'DRAFT'
+                          ? 'bg-amber-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-amber-700'
+                      }`}
+                    >
+                      🟡 Bản nháp ({countDraft})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExamFilterTask('ARCHIVED')}
+                      className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                        examFilterTask === 'ARCHIVED'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-indigo-700'
+                      }`}
+                    >
+                      📦 Đã lưu trữ ({countArchived})
+                    </button>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+
+                {displayedExams.length === 0 ? (
+                  <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 text-slate-400 text-sm">
+                    {examFilterTask === 'ARCHIVED'
+                      ? 'Chưa có đề thi nào trong mục Lưu trữ.'
+                      : assignments.length === 0
+                      ? 'Chưa có buổi thi nào. Hãy chọn Task 1 hoặc Task 2 ở trên để tạo đề thi mới.'
+                      : 'Không có đề thi nào phù hợp với bộ lọc được chọn.'}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {displayedExams.map((assign) => {
+                      const isTask2 = (assign.type || assign.task_type) === 'TASK_2';
+                      const isOpen = assign.status === 'PUBLISHED';
+                      const isArchived = assign.status === 'ARCHIVED';
+                      const isCopied = copiedExamId === assign.id;
+                      const isDuplicating = duplicatingId === assign.id;
+
+                      return (
+                        <div
+                          key={assign.id}
+                          className={`bg-white rounded-2xl p-5 border shadow-xs flex flex-col justify-between gap-4 transition-all ${
+                            isArchived
+                              ? 'border-indigo-200 bg-slate-50/50'
+                              : isOpen
+                              ? isTask2
+                                ? 'border-purple-300 ring-2 ring-purple-100/70'
+                                : 'border-blue-300 ring-2 ring-blue-100/70'
+                              : 'border-slate-200'
+                          }`}
+                        >
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span
+                                  className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md border ${
+                                    isTask2
+                                      ? 'text-purple-800 bg-purple-50 border-purple-200'
+                                      : 'text-blue-800 bg-blue-50 border-blue-200'
+                                  }`}
+                                >
+                                  {isTask2 ? 'Task 2 • 40m' : 'Task 1 • 20m'}
+                                </span>
+                                <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
+                                  {getCategoryLabelClient(assign.type || assign.task_type, assign.task_category)}
+                                </span>
+                              </div>
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                                  isArchived
+                                    ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                                    : isOpen
+                                    ? 'bg-green-100 text-green-800'
+                                    : assign.status === 'CLOSED'
+                                    ? 'bg-slate-200 text-slate-600'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {isArchived
+                                  ? '📦 Đã lưu trữ'
+                                  : isOpen
+                                  ? '🟢 Đang mở'
+                                  : assign.status === 'CLOSED'
+                                  ? '⚪ Đã đóng'
+                                  : '🟡 Bản nháp'}
+                              </span>
+                            </div>
+
+                            <h4 className="text-base font-bold text-slate-900 line-clamp-2 leading-snug">
+                              {assign.title}
+                            </h4>
+
+                            <div className="flex items-center justify-between text-xs text-slate-500 pt-0.5">
+                              <span>
+                                Lớp: <strong className="text-slate-700">{assign.class_name}</strong>
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-blue-600" /> {assign.duration_minutes} phút
+                              </span>
+                            </div>
+
+                            <div className="text-xs text-slate-500 flex items-center justify-between">
+                              <span>
+                                Bài nộp: <strong className="text-green-700">{assign.submitted_count || 0}</strong> / {assign.attempt_count || 0}
+                              </span>
+                              {assign.image_urls && assign.image_urls.length > 0 && (
+                                <span className="text-[11px] text-blue-600 flex items-center gap-1">
+                                  <ImageIcon className="w-3 h-3" /> {assign.image_urls.length} biểu đồ
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Action Buttons for each exam */}
+                          <div className="pt-3 border-t border-slate-100 space-y-2">
+                            {isArchived ? (
+                              /* Action Buttons for Archived Exam */
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedClassId(assign.class_id);
+                                    setSelectedAssignmentId(assign.id);
+                                    setSubmissionFilterStatus('');
+                                    setActiveTab('submissions');
+                                  }}
+                                  className="flex-1 py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                                  title="Xem danh sách bài nộp và tải về file Word/Excel"
+                                >
+                                  <span>Xem bài nộp ({assign.submitted_count || 0})</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleRestoreExam(assign)}
+                                  className="py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="Khôi phục đề thi về trạng thái Đã đóng"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                  <span>Khôi phục</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDeleteModal(assign)}
+                                  className="p-2 text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-xl transition-colors cursor-pointer shrink-0"
+                                  title="Xóa vĩnh viễn đề thi"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              /* Action Buttons for Active Exam */
+                              <>
+                                <div className="flex items-center gap-2">
+                                  {/* Copy Exam Link Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyExamLink(assign)}
+                                    className={`flex-1 py-1.5 px-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                                      isCopied
+                                        ? 'bg-green-600 text-white'
+                                        : 'bg-blue-50 hover:bg-blue-100 text-blue-700'
+                                    }`}
+                                    title="Sao chép link trực tiếp gửi cho học sinh"
+                                  >
+                                    {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                                    <span>{isCopied ? 'Đã copy link thi!' : 'Sao chép link thi'}</span>
+                                  </button>
+
+                                  {/* Duplicate Button */}
+                                  <button
+                                    type="button"
+                                    disabled={isDuplicating}
+                                    onClick={() => handleDuplicateExam(assign)}
+                                    className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                                    title="Nhân bản đề thi này cho lớp khác"
+                                  >
+                                    {isDuplicating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
+                                    <span>Nhân bản</span>
+                                  </button>
+
+                                  {/* Archive Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenArchiveModal(assign)}
+                                    className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl transition-colors cursor-pointer shrink-0"
+                                    title="Lưu trữ đề thi này (Ẩn khỏi danh sách chính nhưng giữ nguyên 100% bài nộp)"
+                                  >
+                                    <Archive className="w-3.5 h-3.5" />
+                                  </button>
+
+                                  {/* Delete Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenDeleteModal(assign)}
+                                    className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl transition-colors cursor-pointer shrink-0"
+                                    title="Xóa đề thi"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  {!isOpen ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartExistingSession(assign)}
+                                      className="flex-1 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                                    >
+                                      <Play className="w-3.5 h-3.5" />
+                                      <span>Mở phòng thi</span>
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => openSessionQrModal(assign.id, assign.title)}
+                                        className="flex-1 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                                      >
+                                        <QrCode className="w-3.5 h-3.5" />
+                                        <span>Mã QR & Link</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCloseExistingSession(assign)}
+                                        className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
+                                      >
+                                        Đóng
+                                      </button>
+                                    </>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditModal(assign)}
+                                    className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
+                                    title="Chỉnh sửa đề thi"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedClassId(assign.class_id);
+                                      setSelectedAssignmentId(assign.id);
+                                      setSubmissionFilterStatus('');
+                                      setActiveTab('submissions');
+                                    }}
+                                    className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
+                                    title="Xem danh sách bài viết của đề này"
+                                  >
+                                    Xem bài
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       </div>
     );
@@ -2212,6 +2438,200 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
             showNotification('success', 'Đã cấp quyền / mở khóa bài thi cho học sinh thành công!');
           }}
         />
+      )}
+
+      {/* MODAL: Confirm Delete Exam (Xóa đề thi) */}
+      {examToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-red-100 space-y-4">
+            {/* Modal Header */}
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Xác Nhận Xóa Đề Thi</h3>
+                <p className="text-xs text-slate-500">Thao tác này sẽ xóa vĩnh viễn đề thi khỏi hệ thống</p>
+              </div>
+            </div>
+
+            {/* Exam Details Box */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md border ${
+                    (examToDelete.type || examToDelete.task_type) === 'TASK_2'
+                      ? 'text-purple-800 bg-purple-50 border-purple-200'
+                      : 'text-blue-800 bg-blue-50 border-blue-200'
+                  }`}
+                >
+                  {(examToDelete.type || examToDelete.task_type) === 'TASK_2' ? 'Writing Task 2' : 'Writing Task 1'}
+                </span>
+                <span className="text-xs text-slate-600 font-semibold">Lớp: {examToDelete.class_name}</span>
+              </div>
+              <p className="font-bold text-slate-900 text-base leading-snug">
+                {examToDelete.title}
+              </p>
+              <div className="text-xs text-slate-500 flex items-center gap-4 pt-1">
+                <span>
+                  Bài nộp: <strong className="text-slate-800">{examToDelete.submitted_count || 0}</strong> bài
+                </span>
+                <span>
+                  Tổng lượt làm: <strong className="text-slate-800">{examToDelete.attempt_count || 0}</strong> lượt
+                </span>
+              </div>
+            </div>
+
+            {/* Case 1: Active attempt in progress -> STRICTLY FORBID DELETION */}
+            {examToDelete.active_attempt_count > 0 ? (
+              <div className="p-4 bg-red-50 border-2 border-red-300 rounded-2xl space-y-2 text-red-800">
+                <div className="flex items-center gap-2 font-bold text-sm text-red-900">
+                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                  <span>KHÔNG THỂ XÓA ĐỀ THI LÚC NÀY!</span>
+                </div>
+                <p className="text-xs leading-relaxed">
+                  Hiện đang có <strong>{examToDelete.active_attempt_count} học sinh</strong> đang trong thời gian làm bài thi. Để bảo vệ dữ liệu học sinh, hệ thống không cho phép xóa đề thi khi có bài làm đang diễn ra.
+                </p>
+                <p className="text-xs text-red-700 italic">
+                  Vui lòng chờ học sinh nộp bài hoặc bấm "Đóng" phòng thi trước khi thực hiện thao tác xóa.
+                </p>
+              </div>
+            ) : (examToDelete.submitted_count || 0) > 0 || (examToDelete.attempt_count || 0) > 0 ? (
+              /* Case 2: Has submissions -> CLEAR WARNING + RECOMMEND ARCHIVE/DOWNLOAD + EXPLICIT CHECKBOX */
+              <div className="space-y-3">
+                <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl space-y-2 text-amber-900">
+                  <div className="flex items-center gap-2 font-bold text-sm text-amber-900">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>CẢNH BÁO: ĐỀ THI ĐÃ CÓ BÀI LÀM!</span>
+                  </div>
+                  <p className="text-xs leading-relaxed">
+                    Đề thi này hiện đã có <strong>{examToDelete.submitted_count || examToDelete.attempt_count} bài làm</strong> của học sinh. Nếu xóa:
+                  </p>
+                  <ul className="text-xs list-disc pl-5 space-y-1 text-red-700 font-semibold">
+                    <li>Toàn bộ bài viết, lịch sử làm bài và điểm số sẽ bị xóa vĩnh viễn.</li>
+                    <li>Nhật ký vi phạm chống gian lận của học sinh sẽ bị mất.</li>
+                    <li>Hành động này KHÔNG THỂ hoàn tác!</li>
+                  </ul>
+                  <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 text-xs">
+                    💡 <strong>Khuyến nghị cô Nga:</strong> Hãy tải về toàn bộ bài làm (Word / Excel) trước khi xóa, hoặc sử dụng tính năng <strong>"Lưu trữ đề thi"</strong> để ẩn đề thi mà vẫn giữ nguyên vẹn toàn bộ bài nộp của học sinh.
+                  </div>
+                </div>
+
+                <label className="flex items-start gap-2.5 p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-300 cursor-pointer text-xs select-none">
+                  <input
+                    type="checkbox"
+                    checked={deleteConfirmWarningChecked}
+                    onChange={(e) => setDeleteConfirmWarningChecked(e.target.checked)}
+                    className="mt-0.5 rounded text-red-600 focus:ring-red-500 cursor-pointer"
+                  />
+                  <span className="font-semibold text-slate-800">
+                    Tôi hiểu rõ hậu quả và xác nhận muốn xóa vĩnh viễn đề thi "{examToDelete.title}" cùng toàn bộ bài nộp của học sinh.
+                  </span>
+                </label>
+              </div>
+            ) : (
+              /* Case 3: Empty exam (no submissions) -> SIMPLE CONFIRMATION */
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl text-xs text-blue-900 space-y-1">
+                <p className="font-semibold">Đề thi này chưa có bài làm nào của học sinh.</p>
+                <p className="text-slate-600">Đề thi sẽ được xóa hoàn toàn và đồng bộ sạch sẽ khỏi cơ sở dữ liệu.</p>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setExamToDelete(null);
+                  setDeleteConfirmWarningChecked(false);
+                }}
+                disabled={isDeletingExam}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+              >
+                {examToDelete.active_attempt_count > 0 ? 'Đóng' : 'Hủy bỏ'}
+              </button>
+
+              {examToDelete.active_attempt_count === 0 && (
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteExam}
+                  disabled={
+                    isDeletingExam ||
+                    (((examToDelete.submitted_count || 0) > 0 || (examToDelete.attempt_count || 0) > 0) &&
+                      !deleteConfirmWarningChecked)
+                  }
+                  className={`px-5 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-1.5 transition-all ${
+                    isDeletingExam ||
+                    (((examToDelete.submitted_count || 0) > 0 || (examToDelete.attempt_count || 0) > 0) &&
+                      !deleteConfirmWarningChecked)
+                      ? 'bg-slate-300 cursor-not-allowed text-slate-500'
+                      : 'bg-red-600 hover:bg-red-700 cursor-pointer shadow-md shadow-red-200'
+                  }`}
+                >
+                  {isDeletingExam ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  <span>{isDeletingExam ? 'Đang xóa...' : 'Xác Nhận Xóa Vĩnh Viễn'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Confirm Archive Exam (Lưu trữ đề thi) */}
+      {examToArchive && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-100 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <Archive className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Lưu Trữ Đề Thi</h3>
+                <p className="text-xs text-slate-500">Ẩn đề thi đã tổ chức xong nhưng bảo toàn 100% dữ liệu</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5 text-xs">
+              <p className="font-bold text-slate-900 text-sm">{examToArchive.title}</p>
+              <p className="text-slate-600">
+                Lớp: <strong>{examToArchive.class_name}</strong> • Đã nộp: <strong>{examToArchive.submitted_count || 0} bài</strong>
+              </p>
+            </div>
+
+            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900 space-y-1.5 leading-relaxed">
+              <p className="font-bold">✨ Quyền lợi khi Lưu trữ đề thi:</p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li>Đề thi sẽ được ẩn khỏi danh sách chính để màn hình gọn gàng.</li>
+                <li>Học sinh không thể truy cập hoặc nộp bài thêm vào đề này.</li>
+                <li>
+                  <strong>Toàn bộ bài viết, biểu đồ, thời gian làm bài, điểm số và vi phạm đều được BẢO TOÀN NGUYÊN VẸN.</strong>
+                </li>
+                <li>Cô Nga vẫn có thể xem và tải về file Word/Excel bất cứ lúc nào.</li>
+                <li>Có thể khôi phục lại đề thi bất cứ khi nào cần (về trạng thái Đã đóng).</li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setExamToArchive(null)}
+                disabled={isArchivingExam}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmArchiveExam}
+                disabled={isArchivingExam}
+                className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-200 transition-colors"
+              >
+                {isArchivingExam ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
+                <span>{isArchivingExam ? 'Đang lưu trữ...' : 'Xác Nhận Lưu Trữ'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
