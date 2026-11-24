@@ -113,12 +113,18 @@ async function runTestSuite() {
 
   try {
     // ----------------------------------------------------
-    // Scenario 0: Teacher Login
+    // Scenario 0: Teacher Login (supports default or customized msnga)
     // ----------------------------------------------------
-    const tLogin = await request('/api/auth/teacher/login', {
+    let tLogin = await request('/api/auth/teacher/login', {
       method: 'POST',
       body: { username: 'teacher', password: 'teacher123' }
     });
+    if (tLogin.status !== 200) {
+      tLogin = await request('/api/auth/teacher/login', {
+        method: 'POST',
+        body: { username: 'msnga', password: 'MsNga@2026!' }
+      });
+    }
     assert.strictEqual(tLogin.status, 200, 'Teacher login should succeed');
     teacherToken = tLogin.data.token;
 
@@ -659,10 +665,16 @@ async function runTestSuite() {
     assert.strictEqual(studentMeRes.data.student.className, 'Ielts Class 2010');
 
     // 27.4: Fresh teacher re-login still loads all 23 students cleanly
-    const reLoginTeacher = await request('/api/auth/teacher/login', {
+    let reLoginTeacher = await request('/api/auth/teacher/login', {
       method: 'POST',
       body: { username: 'teacher', password: 'teacher123' }
     });
+    if (reLoginTeacher.status !== 200) {
+      reLoginTeacher = await request('/api/auth/teacher/login', {
+        method: 'POST',
+        body: { username: 'msnga', password: 'MsNga@2026!' }
+      });
+    }
     assert.strictEqual(reLoginTeacher.status, 200);
     const freshTeacherToken = reLoginTeacher.data.token;
 
