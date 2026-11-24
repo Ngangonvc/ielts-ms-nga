@@ -13,9 +13,3 @@ services:
         generateValue: true
       - key: AUTO_START_TUNNEL
         value: "false"
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_ANON_KEY
-        sync: false
-      - key: PUBLIC_DOMAIN
-        sync: false
