@@ -20,7 +20,16 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-echo [2/2] Đang chạy kiểm thử hồi quy 27 kịch bản chi tiết...
+echo [2/3] Đang chạy kiểm thử tải và quy trình rút gọn...
+node test/test-simplified-upgrade.js
+if %ERRORLEVEL% NEQ 0 (
+    echo [X] Kiểm thử quy trình rút gọn thất bại!
+    pause
+    exit /b %ERRORLEVEL%
+)
+
+echo.
+echo [3/3] Đang chạy kiểm thử hồi quy 27 kịch bản chi tiết...
 node test/test-suite.js
 if %ERRORLEVEL% NEQ 0 (
     echo [X] Kiểm thử hồi quy thất bại!
