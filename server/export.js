@@ -13,7 +13,7 @@ const {
   AlignmentType,
   ShadingType
 } = require('docx');
-const { countWords } = require('./ielts');
+const { countWords, getCategoryLabel } = require('./ielts');
 
 function sanitizeFilenamePart(str, fallback = 'Bai_viet') {
   if (!str || typeof str !== 'string') return fallback;
@@ -101,6 +101,10 @@ async function generateStudentEssayDocxBuffer({ student, assignment, attempt }) 
     })
   );
 
+  const taskType = assignment.type || assignment.task_type || 'TASK_1';
+  const taskLabel = taskType === 'TASK_2' ? 'IELTS Academic Writing Task 2 (40 phút)' : 'IELTS Academic Writing Task 1 (20 phút)';
+  const categoryLabel = getCategoryLabel(taskType, assignment.task_category);
+
   const doc = new Document({
     sections: [
       {
@@ -129,6 +133,8 @@ async function generateStudentEssayDocxBuffer({ student, assignment, attempt }) 
               makeInfoRow('Họ và tên học sinh', studentDisplayName),
               makeInfoRow('Lớp', student.class_name || ''),
               makeInfoRow('Tên buổi Writing', assignment.title || ''),
+              makeInfoRow('Phần thi', taskLabel),
+              makeInfoRow('Dạng bài', categoryLabel),
               makeInfoRow('Ngày làm bài', dateStr),
               makeInfoRow('Tổng số từ', `${wordCount} từ`),
               makeInfoRow('Trạng thái bài làm', translateStatus(attempt.status))
@@ -210,8 +216,14 @@ function generateSubmissionsExcel(submissions, title = 'Danh_sach_bai_nop') {
       }
     }
 
+    const taskType = s.assignment_type || s.task_type || (s.duration_minutes === 40 ? 'TASK_2' : 'TASK_1');
+    const taskLabel = taskType === 'TASK_2' ? 'Task 2' : 'Task 1';
+    const categoryLabel = getCategoryLabel(taskType, s.task_category);
+
     return {
       'STT': idx + 1,
+      'Phần Thi': taskLabel,
+      'Dạng Bài': categoryLabel,
       'Lớp': s.class_name || '',
       'Mã Học Sinh': s.student_code || s.student_id || '',
       'Họ và Tên': s.full_name || '',
@@ -221,7 +233,7 @@ function generateSubmissionsExcel(submissions, title = 'Danh_sach_bai_nop') {
       'Thời Gian Bắt Đầu': s.start_time ? new Date(s.start_time).toLocaleString('vi-VN') : '',
       'Thời Gian Nộp': s.submitted_at ? new Date(s.submitted_at).toLocaleString('vi-VN') : '',
       'Thời Gian Làm Bài': formatTimeSpent(timeSpentSec),
-      'Task Achievement (TA)': s.task_achievement !== null && s.task_achievement !== undefined ? s.task_achievement : '-',
+      'Task Achievement / Response (TA/TR)': s.task_achievement !== null && s.task_achievement !== undefined ? s.task_achievement : '-',
       'Coherence & Cohesion (CC)': s.coherence_cohesion !== null && s.coherence_cohesion !== undefined ? s.coherence_cohesion : '-',
       'Lexical Resource (LR)': s.lexical_resource !== null && s.lexical_resource !== undefined ? s.lexical_resource : '-',
       'Grammatical Accuracy (GRA)': s.grammatical_accuracy !== null && s.grammatical_accuracy !== undefined ? s.grammatical_accuracy : '-',
@@ -235,6 +247,8 @@ function generateSubmissionsExcel(submissions, title = 'Danh_sach_bai_nop') {
   // Auto-fit column widths
   const colWidths = [
     { wch: 6 },  // STT
+    { wch: 10 }, // Phần Thi
+    { wch: 28 }, // Dạng Bài
     { wch: 12 }, // Lớp
     { wch: 14 }, // Mã HS
     { wch: 25 }, // Họ Tên
@@ -244,7 +258,7 @@ function generateSubmissionsExcel(submissions, title = 'Danh_sach_bai_nop') {
     { wch: 22 }, // TG Bắt Đầu
     { wch: 22 }, // TG Nộp
     { wch: 18 }, // Thời Gian Làm Bài
-    { wch: 10 }, // TA
+    { wch: 12 }, // TA/TR
     { wch: 10 }, // CC
     { wch: 10 }, // LR
     { wch: 10 }, // GRA
@@ -255,7 +269,7 @@ function generateSubmissionsExcel(submissions, title = 'Danh_sach_bai_nop') {
   worksheet['!cols'] = colWidths;
 
   const workbook = xlsx.utils.book_new();
-  xlsx.utils.book_append_sheet(workbook, worksheet, 'Kết quả IELTS Task 1');
+  xlsx.utils.book_append_sheet(workbook, worksheet, 'Kết quả IELTS Writing');
 
   const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
   return buffer;

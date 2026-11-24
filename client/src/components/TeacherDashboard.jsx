@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { apiRequest, downloadTeacherFile, TASK_1_CATEGORIES } from '../api';
+import { apiRequest, downloadTeacherFile, TASK_1_CATEGORIES, TASK_2_CATEGORIES, getCategoryLabelClient } from '../api';
 import ClassesAndStudentsManager from './ClassesAndStudentsManager';
 import {
   BookOpen,
@@ -62,8 +62,13 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedAssignmentId, setSelectedAssignmentId] = useState('');
   const [submissionFilterStatus, setSubmissionFilterStatus] = useState('');
+  const [selectedTaskType, setSelectedTaskType] = useState(''); // '' | 'TASK_1' | 'TASK_2'
+
+  // Filter for exam list
+  const [examFilterTask, setExamFilterTask] = useState('ALL'); // 'ALL' | 'TASK_1' | 'TASK_2'
 
   // Create Writing Session Form
+  const [newTaskType, setNewTaskType] = useState('TASK_1'); // 'TASK_1' | 'TASK_2'
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState('LINE_GRAPH');
   const [newClassId, setNewClassId] = useState('');
@@ -75,8 +80,22 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
   const [showDetailedCreate, setShowDetailedCreate] = useState(false);
   const [creatingSession, setCreatingSession] = useState(false);
 
+  function handleSwitchNewTaskType(type) {
+    setNewTaskType(type);
+    if (type === 'TASK_2') {
+      setNewDuration(40);
+      setNewCategory('OPINION');
+      setNewInstructions('You should spend about 40 minutes on this task. Write at least 250 words.');
+    } else {
+      setNewDuration(20);
+      setNewCategory('LINE_GRAPH');
+      setNewInstructions('You should spend about 20 minutes on this task. Write at least 150 words.');
+    }
+  }
+
   // Edit Writing Session Modal
   const [editingAssignment, setEditingAssignment] = useState(null);
+  const [editTaskType, setEditTaskType] = useState('TASK_1');
   const [editTitle, setEditTitle] = useState('');
   const [editCategory, setEditCategory] = useState('LINE_GRAPH');
   const [editClassId, setEditClassId] = useState('');
@@ -194,6 +213,7 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
       if (selectedClassId) params.set('classId', selectedClassId);
       if (selectedAssignmentId) params.set('assignmentId', selectedAssignmentId);
       if (submissionFilterStatus) params.set('status', submissionFilterStatus);
+      if (selectedTaskType) params.set('taskType', selectedTaskType);
       const queryStr = params.toString() ? `?${params.toString()}` : '';
       const res = await apiRequest(`/teacher/submissions${queryStr}`);
       setSubmissions(res.submissions || []);
@@ -202,7 +222,7 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
     } finally {
       setLoadingSubmissions(false);
     }
-  }, [selectedClassId, selectedAssignmentId, submissionFilterStatus]);
+  }, [selectedClassId, selectedAssignmentId, submissionFilterStatus, selectedTaskType]);
 
   useEffect(() => {
     loadClasses();
@@ -289,13 +309,16 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
 
     setCreatingSession(true);
     try {
+      const defaultDuration = newTaskType === 'TASK_2' ? 40 : 20;
       const formData = new FormData();
       formData.append('title', newTitle.trim());
+      formData.append('type', newTaskType);
+      formData.append('taskType', newTaskType);
       formData.append('classId', newClassId);
       formData.append('taskCategory', newCategory);
       formData.append('instructions', newInstructions.trim());
       formData.append('promptQuestion', newPromptQuestion.trim());
-      formData.append('durationMinutes', Math.min(240, Math.max(1, parseInt(newDuration, 10) || 20)));
+      formData.append('durationMinutes', Math.min(240, Math.max(1, parseInt(newDuration, 10) || defaultDuration)));
       formData.append('status', startImmediately ? 'PUBLISHED' : 'DRAFT');
 
       for (const file of newChartFiles) {
@@ -310,11 +333,12 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
       setChartPreviews([]);
       await loadAssignments();
 
+      const taskLabel = newTaskType === 'TASK_2' ? 'IELTS Task 2' : 'IELTS Task 1';
       if (startImmediately && res.assignment?.id) {
-        showNotification('success', `Đã mở phòng thi IELTS Task 1 "${res.assignment.title}"!`);
+        showNotification('success', `Đã mở phòng thi ${taskLabel} "${res.assignment.title}"!`);
         await openSessionQrModal(res.assignment.id, res.assignment.title);
       } else {
-        showNotification('success', 'Đã lưu buổi Writing Task 1 ở trạng thái chuẩn bị (DRAFT).');
+        showNotification('success', `Đã lưu buổi Writing ${taskLabel} ở trạng thái chuẩn bị (DRAFT).`);
       }
     } catch (err) {
       showNotification('error', err.message);
@@ -324,11 +348,13 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
   }
 
   function handleOpenEditModal(assign) {
+    const taskType = assign.type || assign.task_type || 'TASK_1';
     setEditingAssignment(assign);
+    setEditTaskType(taskType);
     setEditTitle(assign.title || '');
-    setEditCategory(assign.task_category || 'LINE_GRAPH');
+    setEditCategory(assign.task_category || (taskType === 'TASK_2' ? 'OPINION' : 'LINE_GRAPH'));
     setEditClassId(assign.class_id || '');
-    setEditDuration(assign.duration_minutes || 20);
+    setEditDuration(assign.duration_minutes || (taskType === 'TASK_2' ? 40 : 20));
     setEditInstructions(assign.instructions || '');
     setEditPromptQuestion(assign.prompt_question || '');
     setEditStatus(assign.status || 'DRAFT');
@@ -349,6 +375,8 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
     try {
       const formData = new FormData();
       formData.append('title', editTitle.trim());
+      formData.append('type', editTaskType);
+      formData.append('taskType', editTaskType);
       formData.append('classId', editClassId);
       formData.append('taskCategory', editCategory);
       formData.append('durationMinutes', editDuration);
@@ -454,8 +482,14 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
       const params = new URLSearchParams();
       if (selectedClassId) params.set('classId', selectedClassId);
       if (selectedAssignmentId) params.set('assignmentId', selectedAssignmentId);
+      if (selectedTaskType) params.set('taskType', selectedTaskType);
       const queryStr = params.toString() ? `?${params.toString()}` : '';
-      await downloadTeacherFile(`/teacher/export/zip${queryStr}`, 'Tat_Ca_Bai_Writing_IELTS.zip');
+      const zipName = selectedTaskType === 'TASK_2'
+        ? 'Tat_Ca_Bai_Writing_Task_2.zip'
+        : selectedTaskType === 'TASK_1'
+        ? 'Tat_Ca_Bai_Writing_Task_1.zip'
+        : 'Tat_Ca_Bai_Writing_IELTS.zip';
+      await downloadTeacherFile(`/teacher/export/zip${queryStr}`, zipName);
       showNotification('success', 'Đã tải thành công file nén ZIP chứa tất cả bài viết Word (.docx)!');
     } catch (err) {
       showNotification('error', 'Không thể tải file ZIP: ' + err.message);
@@ -468,8 +502,14 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
       const params = new URLSearchParams();
       if (selectedClassId) params.set('classId', selectedClassId);
       if (selectedAssignmentId) params.set('assignmentId', selectedAssignmentId);
+      if (selectedTaskType) params.set('taskType', selectedTaskType);
       const queryStr = params.toString() ? `?${params.toString()}` : '';
-      await downloadTeacherFile(`/teacher/export/excel${queryStr}`, 'Ket_Qua_IELTS_Ms_Nga.xlsx');
+      const excelName = selectedTaskType === 'TASK_2'
+        ? 'Ket_Qua_IELTS_Task_2.xlsx'
+        : selectedTaskType === 'TASK_1'
+        ? 'Ket_Qua_IELTS_Task_1.xlsx'
+        : 'Ket_Qua_IELTS_Ms_Nga.xlsx';
+      await downloadTeacherFile(`/teacher/export/excel${queryStr}`, excelName);
       showNotification('success', 'Đã xuất bảng kết quả Excel (.xlsx) thành công!');
     } catch (err) {
       showNotification('error', 'Lỗi xuất Excel: ' + err.message);
@@ -655,32 +695,68 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
 
         {/* Create Writing Session Form */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-base sm:text-lg font-extrabold text-blue-900 flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-blue-600" />
-                <span>Tạo Đề Thi IELTS Academic Writing Task 1</span>
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Nhập đề bài, tải ảnh biểu đồ và phát link/mã QR cho học sinh làm bài trong 20 phút.
-              </p>
+          {/* Task 1 / Task 2 Selector Tabs */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-600">Phần thi:</span>
+              <div className="inline-flex p-1 bg-slate-100 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => handleSwitchNewTaskType('TASK_1')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    newTaskType === 'TASK_1'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  📊 Task 1 (20 phút • 150 từ)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSwitchNewTaskType('TASK_2')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    newTaskType === 'TASK_2'
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  📝 Task 2 (40 phút • 250 từ)
+                </button>
+              </div>
             </div>
+
             <button
               type="button"
               onClick={() => setShowDetailedCreate(!showDetailedCreate)}
               className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
             >
-              <span>{showDetailedCreate ? 'Thu gọn tùy chọn' : 'Đề thi chi tiết & Đính kèm ảnh biểu đồ'}</span>
+              <span>{showDetailedCreate ? 'Thu gọn tùy chọn' : (newTaskType === 'TASK_2' ? 'Câu hỏi chi tiết & Tùy chọn' : 'Đề thi chi tiết & Đính kèm ảnh biểu đồ')}</span>
               {showDetailedCreate ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
           </div>
 
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className={`text-base sm:text-lg font-extrabold flex items-center gap-2 ${newTaskType === 'TASK_2' ? 'text-purple-900' : 'text-blue-900'}`}>
+                <BookOpen className={`w-5 h-5 ${newTaskType === 'TASK_2' ? 'text-purple-600' : 'text-blue-600'}`} />
+                <span>Tạo Đề Thi IELTS Academic Writing {newTaskType === 'TASK_2' ? 'Task 2' : 'Task 1'}</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {newTaskType === 'TASK_2'
+                  ? 'Nhập câu hỏi bài luận Task 2 (Opinion, Discussion,...) và phát link/mã QR cho học sinh làm bài trong 40 phút.'
+                  : 'Nhập đề bài, tải ảnh biểu đồ và phát link/mã QR cho học sinh làm bài trong 20 phút.'}
+              </p>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
             <div className="md:col-span-4">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Tên buổi thi / Đề bài</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {newTaskType === 'TASK_2' ? 'Chủ đề / Tên bài luận Task 2' : 'Tên buổi thi / Đề bài Task 1'}
+              </label>
               <input
                 type="text"
-                placeholder="Ví dụ: Line Graph - Life Expectancy (1950 - 2020)"
+                placeholder={newTaskType === 'TASK_2' ? 'Ví dụ: Technology and Education in University' : 'Ví dụ: Line Graph - Life Expectancy (1950 - 2020)'}
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-500"
@@ -688,13 +764,15 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
             </div>
 
             <div className="md:col-span-3">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Dạng biểu đồ Task 1</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                {newTaskType === 'TASK_2' ? 'Dạng bài Task 2' : 'Dạng biểu đồ Task 1'}
+              </label>
               <select
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
                 className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium"
               >
-                {Object.entries(TASK_1_CATEGORIES).map(([key, label]) => (
+                {Object.entries(newTaskType === 'TASK_2' ? TASK_2_CATEGORIES : TASK_1_CATEGORIES).map(([key, label]) => (
                   <option key={key} value={key}>
                     {label}
                   </option>
@@ -726,7 +804,9 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
                 type="button"
                 disabled={creatingSession || classes.length === 0}
                 onClick={() => handleCreateSession(true)}
-                className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                className={`w-full py-2.5 px-3 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50 ${
+                  newTaskType === 'TASK_2' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
                 {creatingSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                 <span>Bắt đầu thi</span>
@@ -739,20 +819,28 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
             <div className="pt-3 border-t border-slate-100 space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Đề bài câu hỏi (Question Prompt)
+                  Đề bài câu hỏi ({newTaskType === 'TASK_2' ? 'Essay Question Prompt' : 'Question Prompt'})
                 </label>
                 <textarea
-                  rows={2}
+                  rows={newTaskType === 'TASK_2' ? 3 : 2}
                   value={newPromptQuestion}
                   onChange={(e) => setNewPromptQuestion(e.target.value)}
-                  placeholder="The chart below shows information about... Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+                  placeholder={
+                    newTaskType === 'TASK_2'
+                      ? 'Some people believe that unpaid community service should be a compulsory part of high school programmes. To what extent do you agree or disagree? Give reasons for your answer and include any relevant examples from your own knowledge or experience.'
+                      : 'The chart below shows information about... Summarise the information by selecting and reporting the main features, and make comparisons where relevant.'
+                  }
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 font-serif"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                  <span>Tải lên ảnh biểu đồ (Bar, Line, Pie, Table, Process, Map, Mixed)</span>
+                  <span>
+                    {newTaskType === 'TASK_2'
+                      ? 'Ảnh/Tài liệu đính kèm (Không bắt buộc cho Task 2)'
+                      : 'Tải lên ảnh biểu đồ (Bar, Line, Pie, Table, Process, Map, Mixed)'}
+                  </span>
                   <span className="text-slate-400 text-[11px]">Hỗ trợ JPG, PNG, WEBP, SVG tối đa 10MB</span>
                 </label>
                 <input
@@ -778,9 +866,13 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
 
           <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-slate-500">Thời gian quy chuẩn Task 1:</span>
-              <span className="px-2.5 py-1 rounded-lg font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                20 phút
+              <span className="text-slate-500">Thời gian quy chuẩn {newTaskType === 'TASK_2' ? 'Task 2' : 'Task 1'}:</span>
+              <span className={`px-2.5 py-1 rounded-lg font-bold border ${
+                newTaskType === 'TASK_2'
+                  ? 'bg-purple-100 text-purple-800 border-purple-200'
+                  : 'bg-blue-100 text-blue-800 border-blue-200'
+              }`}>
+                {newTaskType === 'TASK_2' ? '40 phút • Tối thiểu 250 từ' : '20 phút • Tối thiểu 150 từ'}
               </span>
             </div>
             <button
@@ -796,10 +888,47 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
 
         {/* Writing Sessions List */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="font-extrabold text-slate-900 text-sm sm:text-base flex items-center gap-2">
               <span>Danh Sách Các Đề Thi Writing ({assignments.length})</span>
             </h3>
+
+            {/* Filter pills: All, Task 1, Task 2 */}
+            <div className="inline-flex p-1 bg-slate-100 rounded-xl text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setExamFilterTask('ALL')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  examFilterTask === 'ALL'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Tất cả ({assignments.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setExamFilterTask('TASK_1')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  examFilterTask === 'TASK_1'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-blue-700'
+                }`}
+              >
+                📊 Task 1 ({assignments.filter((a) => (a.type || a.task_type) !== 'TASK_2').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setExamFilterTask('TASK_2')}
+                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                  examFilterTask === 'TASK_2'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-purple-700'
+                }`}
+              >
+                📝 Task 2 ({assignments.filter((a) => (a.type || a.task_type) === 'TASK_2').length})
+              </button>
+            </div>
           </div>
 
           {assignments.length === 0 ? (
@@ -808,7 +937,15 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {assignments.map((assign) => {
+              {assignments
+                .filter((a) => {
+                  const isT2 = (a.type || a.task_type) === 'TASK_2';
+                  if (examFilterTask === 'TASK_1') return !isT2;
+                  if (examFilterTask === 'TASK_2') return isT2;
+                  return true;
+                })
+                .map((assign) => {
+                const isTask2 = (assign.type || assign.task_type) === 'TASK_2';
                 const isOpen = assign.status === 'PUBLISHED';
                 const isCopied = copiedExamId === assign.id;
                 const isDuplicating = duplicatingId === assign.id;
@@ -817,14 +954,25 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
                   <div
                     key={assign.id}
                     className={`bg-white rounded-2xl p-5 border shadow-xs flex flex-col justify-between gap-4 transition-all ${
-                      isOpen ? 'border-blue-300 ring-2 ring-blue-100/70' : 'border-slate-200'
+                      isOpen
+                        ? isTask2 ? 'border-purple-300 ring-2 ring-purple-100/70' : 'border-blue-300 ring-2 ring-blue-100/70'
+                        : 'border-slate-200'
                     }`}
                   >
                     <div className="space-y-2.5">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-bold text-blue-800 bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-md">
-                          {TASK_1_CATEGORIES[assign.task_category] || assign.task_category}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md border ${
+                            isTask2
+                              ? 'text-purple-800 bg-purple-50 border-purple-200'
+                              : 'text-blue-800 bg-blue-50 border-blue-200'
+                          }`}>
+                            {isTask2 ? 'Task 2 • 40m' : 'Task 1 • 20m'}
+                          </span>
+                          <span className="text-[11px] font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
+                            {getCategoryLabelClient(assign.type || assign.task_type, assign.task_category)}
+                          </span>
+                        </div>
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
                             isOpen
@@ -963,6 +1111,19 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
         <div className="bg-white p-4 rounded-2xl shadow-xs border border-slate-200 flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <div>
+              <label className="block text-[11px] font-semibold text-slate-500 uppercase mb-1">Phần thi</label>
+              <select
+                value={selectedTaskType}
+                onChange={(e) => setSelectedTaskType(e.target.value)}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none"
+              >
+                <option value="">-- Cả Task 1 & Task 2 --</option>
+                <option value="TASK_1">📊 Task 1 (20 phút • 150 từ)</option>
+                <option value="TASK_2">📝 Task 2 (40 phút • 250 từ)</option>
+              </select>
+            </div>
+
+            <div>
               <label className="block text-[11px] font-semibold text-slate-500 uppercase mb-1">Lớp học</label>
               <select
                 value={selectedClassId}
@@ -1068,6 +1229,7 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
                 <tr>
                   <th className="py-3 px-4">Học sinh</th>
                   <th className="py-3 px-4">Lớp</th>
+                  <th className="py-3 px-4 text-center">Phần thi</th>
                   <th className="py-3 px-4">Đề thi Writing</th>
                   <th className="py-3 px-4 text-center">Số từ</th>
                   <th className="py-3 px-4">Bắt đầu</th>
@@ -1081,7 +1243,7 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
               <tbody className="divide-y divide-slate-100">
                 {submissions.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-10 text-center text-slate-400">
+                    <td colSpan={11} className="py-10 text-center text-slate-400">
                       Chưa có bài viết nào phù hợp với bộ lọc hiện tại.
                     </td>
                   </tr>
@@ -1089,6 +1251,8 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
                   submissions.map((sub) => {
                     const isInvalidated = ['CANCELLED', 'INVALIDATED'].includes(sub.status);
                     const isAuto = ['AUTO-SUBMITTED', 'AUTO_SUBMITTED', 'EXPIRED'].includes(sub.status);
+                    const isSubTask2 = sub.assignment_type === 'TASK_2' || sub.task_type === 'TASK_2';
+                    const targetMinWords = isSubTask2 ? 250 : 150;
 
                     return (
                       <tr key={sub.id} className="hover:bg-slate-50/80 transition-colors">
@@ -1099,12 +1263,24 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
                           )}
                         </td>
                         <td className="py-3 px-4 text-slate-600">{sub.class_name}</td>
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded-md text-[11px] font-extrabold border ${
+                            isSubTask2
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              : 'bg-blue-50 text-blue-800 border-blue-200'
+                          }`}>
+                            {isSubTask2 ? 'Task 2 (40p)' : 'Task 1 (20p)'}
+                          </span>
+                        </td>
                         <td className="py-3 px-4 text-slate-800 font-medium max-w-[200px] truncate" title={sub.assignment_title}>
                           {sub.assignment_title}
                         </td>
                         <td className="py-3 px-4 text-center font-bold text-slate-700">
-                          <span className={sub.word_count >= 150 ? 'text-green-700' : 'text-slate-700'}>
+                          <span className={sub.word_count >= targetMinWords ? 'text-green-700 font-black' : 'text-slate-700'}>
                             {sub.word_count || 0} từ
+                          </span>
+                          <span className="block text-[10px] text-slate-400 font-normal">
+                            Min {targetMinWords}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-slate-500 whitespace-nowrap">
@@ -1364,7 +1540,9 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full p-6 space-y-4 my-6 border border-slate-100">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-extrabold text-slate-900 text-base">Chỉnh Sửa Đề Thi IELTS Writing Task 1</h3>
+              <h3 className="font-extrabold text-slate-900 text-base">
+                Chỉnh Sửa Đề Thi IELTS Writing {editTaskType === 'TASK_2' ? 'Task 2' : 'Task 1'}
+              </h3>
               <button
                 type="button"
                 onClick={() => setEditingAssignment(null)}
@@ -1375,6 +1553,42 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
             </div>
 
             <form onSubmit={handleSaveEditAssignment} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Phần thi</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditTaskType('TASK_1');
+                      if (editDuration === 40) setEditDuration(20);
+                      if (Object.keys(TASK_2_CATEGORIES).includes(editCategory)) setEditCategory('LINE_GRAPH');
+                    }}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                      editTaskType === 'TASK_1'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    📊 IELTS Task 1 (20 phút)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditTaskType('TASK_2');
+                      if (editDuration === 20) setEditDuration(40);
+                      if (Object.keys(TASK_1_CATEGORIES).includes(editCategory)) setEditCategory('OPINION');
+                    }}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                      editTaskType === 'TASK_2'
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    📝 IELTS Task 2 (40 phút)
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Tên đề thi</label>
                 <input
@@ -1388,13 +1602,15 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Dạng biểu đồ</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    {editTaskType === 'TASK_2' ? 'Dạng bài Task 2' : 'Dạng biểu đồ Task 1'}
+                  </label>
                   <select
                     value={editCategory}
                     onChange={(e) => setEditCategory(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none font-medium"
                   >
-                    {Object.entries(TASK_1_CATEGORIES).map(([key, label]) => (
+                    {Object.entries(editTaskType === 'TASK_2' ? TASK_2_CATEGORIES : TASK_1_CATEGORIES).map(([key, label]) => (
                       <option key={key} value={key}>
                         {label}
                       </option>
@@ -1403,17 +1619,29 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Trạng thái đề</label>
-                  <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none font-semibold"
-                  >
-                    <option value="DRAFT">Bản nháp (DRAFT)</option>
-                    <option value="PUBLISHED">Đang mở (PUBLISHED)</option>
-                    <option value="CLOSED">Đã đóng (CLOSED)</option>
-                  </select>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Thời gian làm bài (phút)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="240"
+                    value={editDuration}
+                    onChange={(e) => setEditDuration(parseInt(e.target.value, 10) || (editTaskType === 'TASK_2' ? 40 : 20))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none font-medium"
+                  />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Trạng thái đề</label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none font-semibold"
+                >
+                  <option value="DRAFT">Bản nháp (DRAFT)</option>
+                  <option value="PUBLISHED">Đang mở (PUBLISHED)</option>
+                  <option value="CLOSED">Đã đóng (CLOSED)</option>
+                </select>
               </div>
 
               <div>
@@ -1519,7 +1747,9 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
                   {/* Question Prompt Preview */}
                   {viewingEssayData.assignment?.prompt_question && (
                     <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-xl text-xs text-blue-900">
-                      <strong className="block mb-1 font-bold">Đề bài IELTS Task 1:</strong>
+                      <strong className="block mb-1 font-bold">
+                        Đề bài {(viewingEssayData.assignment?.type || viewingEssayData.assignment?.task_type) === 'TASK_2' ? 'IELTS Academic Writing Task 2:' : 'IELTS Academic Writing Task 1:'}
+                      </strong>
                       <p className="font-serif whitespace-pre-line">{viewingEssayData.assignment.prompt_question}</p>
                     </div>
                   )}

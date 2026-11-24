@@ -172,6 +172,17 @@ async function initDb() {
     );
   `);
 
+  // Safe migrations for Task 1 & Task 2 support
+  try {
+    dbInstance.run("ALTER TABLE assignments ADD COLUMN task_type TEXT DEFAULT 'TASK_1'");
+  } catch (_) {
+    // Column already exists
+  }
+  try {
+    dbInstance.run("UPDATE assignments SET task_type = COALESCE(type, 'TASK_1') WHERE task_type IS NULL OR task_type = ''");
+    dbInstance.run("UPDATE assignments SET type = COALESCE(task_type, 'TASK_1') WHERE type IS NULL OR type = ''");
+  } catch (_) {}
+
   // Seed default teacher if not present
   const teachersCount = query('SELECT COUNT(*) as count FROM teachers')[0]?.count || 0;
   if (teachersCount === 0) {

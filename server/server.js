@@ -644,7 +644,8 @@ app.post('/api/students/import', authenticateTeacher, uploadExcel.single('file')
 // ==========================================
 
 app.get('/api/assignments', authenticateTeacher, (req, res) => {
-  const { classId } = req.query;
+  const { classId, taskType, type } = req.query;
+  const selectedType = (taskType || type || '').toUpperCase();
   let sql = `
     SELECT a.*, c.name as class_name,
       (SELECT COUNT(*) FROM attempts att WHERE att.assignment_id = a.id) as attempt_count,
@@ -658,9 +659,15 @@ app.get('/api/assignments', authenticateTeacher, (req, res) => {
     sql += ' AND a.class_id = ?';
     params.push(classId);
   }
+  if (selectedType) {
+    sql += ' AND (a.type = ? OR a.task_type = ?)';
+    params.push(selectedType, selectedType);
+  }
   sql += ' ORDER BY a.created_at DESC';
   const assignments = query(sql, params).map(a => ({
     ...a,
+    type: a.type || a.task_type || 'TASK_1',
+    task_type: a.task_type || a.type || 'TASK_1',
     image_urls: a.image_urls ? JSON.parse(a.image_urls) : []
   }));
   res.json({ assignments });
@@ -670,12 +677,13 @@ app.post('/api/assignments', authenticateTeacher, upload.array('images', 5), (re
   try {
     const {
       type = 'TASK_1',
-      taskCategory = 'WRITING',
+      taskType,
+      taskCategory,
       title,
       instructions = '',
       promptQuestion = '',
       classId,
-      durationMinutes = 20,
+      durationMinutes,
       status = 'DRAFT',
       startTime,
       endTime
@@ -685,17 +693,22 @@ app.post('/api/assignments', authenticateTeacher, upload.array('images', 5), (re
       return res.status(400).json({ error: 'Vui lòng nhập Tên buổi Writing và chọn Lớp học' });
     }
 
-    const parsedDuration = Math.min(240, Math.max(1, parseInt(durationMinutes, 10) || 20));
+    const resolvedType = (taskType || type || 'TASK_1').toUpperCase();
+    const defaultDuration = resolvedType === 'TASK_2' ? 40 : 20;
+    const defaultCategory = resolvedType === 'TASK_2' ? 'OPINION' : 'LINE_GRAPH';
+    const parsedDuration = Math.min(240, Math.max(1, parseInt(durationMinutes, 10) || defaultDuration));
+    const resolvedCategory = taskCategory || defaultCategory;
     const imageUrls = req.files ? req.files.map(f => `/uploads/${f.filename}`) : [];
 
     const id = 'a-' + uuidv4().slice(0, 8);
     run(
-      `INSERT INTO assignments (id, type, task_category, title, instructions, prompt_question, image_urls, class_id, duration_minutes, status, start_time, end_time, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO assignments (id, type, task_type, task_category, title, instructions, prompt_question, image_urls, class_id, duration_minutes, status, start_time, end_time, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
-        type,
-        taskCategory || 'WRITING',
+        resolvedType,
+        resolvedType,
+        resolvedCategory,
         title.toString().trim(),
         (instructions || '').toString().trim(),
         (promptQuestion || '').toString().trim(),
@@ -713,6 +726,8 @@ app.post('/api/assignments', authenticateTeacher, upload.array('images', 5), (re
     res.json({
       assignment: {
         ...created,
+        type: created.type || created.task_type || 'TASK_1',
+        task_type: created.task_type || created.type || 'TASK_1',
         image_urls: JSON.parse(created.image_urls || '[]')
       }
     });
@@ -728,6 +743,8 @@ app.put('/api/assignments/:id', authenticateTeacher, upload.array('images', 5), 
     if (!existing) return res.status(404).json({ error: 'Không tìm thấy buổi Writing' });
 
     const {
+      type,
+      taskType,
       taskCategory,
       title,
       instructions,
@@ -737,6 +754,9 @@ app.put('/api/assignments/:id', authenticateTeacher, upload.array('images', 5), 
       status,
       existingImages
     } = req.body || {};
+
+    const updatedType = (taskType || type || existing.type || existing.task_type || 'TASK_1').toUpperCase();
+    const defaultDuration = updatedType === 'TASK_2' ? 40 : 20;
 
     let keptImages = [];
     if (existingImages) {
@@ -756,17 +776,19 @@ app.put('/api/assignments/:id', authenticateTeacher, upload.array('images', 5), 
 
     run(
       `UPDATE assignments SET 
-        task_category = ?, title = ?, instructions = ?, prompt_question = ?, 
+        type = ?, task_type = ?, task_category = ?, title = ?, instructions = ?, prompt_question = ?, 
         image_urls = ?, class_id = ?, duration_minutes = ?, status = ?
        WHERE id = ?`,
       [
+        updatedType,
+        updatedType,
         taskCategory !== undefined ? taskCategory : existing.task_category,
         title !== undefined ? title.toString().trim() : existing.title,
         instructions !== undefined ? instructions.toString().trim() : (existing.instructions || ''),
         promptQuestion !== undefined ? promptQuestion.toString().trim() : (existing.prompt_question || ''),
         JSON.stringify(allImages),
         classId !== undefined ? classId : existing.class_id,
-        durationMinutes !== undefined ? Math.min(240, Math.max(1, parseInt(durationMinutes, 10) || 20)) : existing.duration_minutes,
+        durationMinutes !== undefined ? Math.min(240, Math.max(1, parseInt(durationMinutes, 10) || defaultDuration)) : existing.duration_minutes,
         status !== undefined ? status : existing.status,
         req.params.id
       ]
@@ -776,6 +798,8 @@ app.put('/api/assignments/:id', authenticateTeacher, upload.array('images', 5), 
     res.json({
       assignment: {
         ...updated,
+        type: updated.type || updated.task_type || 'TASK_1',
+        task_type: updated.task_type || updated.type || 'TASK_1',
         image_urls: JSON.parse(updated.image_urls || '[]')
       }
     });
@@ -803,19 +827,23 @@ app.post('/api/assignments/:id/duplicate', authenticateTeacher, (req, res) => {
     const newId = 'a-' + uuidv4().slice(0, 8);
     const newTitle = `${existing.title} (Bản sao)`;
 
+    const resolvedType = existing.type || existing.task_type || 'TASK_1';
+    const defaultDuration = resolvedType === 'TASK_2' ? 40 : 20;
+
     run(
-      `INSERT INTO assignments (id, type, task_category, title, instructions, prompt_question, image_urls, class_id, duration_minutes, status, start_time, end_time, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO assignments (id, type, task_type, task_category, title, instructions, prompt_question, image_urls, class_id, duration_minutes, status, start_time, end_time, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         newId,
-        existing.type || 'TASK_1',
-        existing.task_category || 'LINE_GRAPH',
+        resolvedType,
+        resolvedType,
+        existing.task_category || (resolvedType === 'TASK_2' ? 'OPINION' : 'LINE_GRAPH'),
         newTitle,
         existing.instructions || '',
         existing.prompt_question || '',
         existing.image_urls || '[]',
         existing.class_id,
-        existing.duration_minutes || 20,
+        existing.duration_minutes || defaultDuration,
         'DRAFT', // Duplicated exam defaults to DRAFT for review
         null,
         null,
@@ -827,6 +855,8 @@ app.post('/api/assignments/:id/duplicate', authenticateTeacher, (req, res) => {
     res.json({
       assignment: {
         ...duplicated,
+        type: duplicated.type || duplicated.task_type || 'TASK_1',
+        task_type: duplicated.task_type || duplicated.type || 'TASK_1',
         image_urls: JSON.parse(duplicated.image_urls || '[]')
       }
     });
@@ -1034,13 +1064,14 @@ app.get('/api/exam/:id/public', (req, res) => {
     res.json({
       assignment: {
         id: assignment.id,
-        type: assignment.type,
+        type: assignment.type || assignment.task_type || 'TASK_1',
+        task_type: assignment.task_type || assignment.type || 'TASK_1',
         task_category: assignment.task_category,
         title: assignment.title,
         instructions: assignment.instructions,
         prompt_question: assignment.prompt_question,
         image_urls: assignment.image_urls ? JSON.parse(assignment.image_urls) : [],
-        duration_minutes: assignment.duration_minutes || 20,
+        duration_minutes: assignment.duration_minutes || (assignment.type === 'TASK_2' ? 40 : 20),
         status: assignment.status,
         class_name: assignedClass?.name || ''
       },
@@ -1657,7 +1688,8 @@ setInterval(autoFinalizeExpiredAttempts, 10000);
 
 // Submissions Monitor
 app.get('/api/teacher/submissions', authenticateTeacher, (req, res) => {
-  const { classId, assignmentId, status } = req.query;
+  const { classId, assignmentId, status, taskType, type } = req.query;
+  const selectedType = (taskType || type || '').toUpperCase();
 
   let sql = `
     SELECT 
@@ -1665,7 +1697,7 @@ app.get('/api/teacher/submissions', authenticateTeacher, (req, res) => {
       att.submitted_at, att.word_count, att.status, att.last_saved_at,
       s.full_name, s.student_code,
       c.id as class_id, c.name as class_name,
-      a.title as assignment_title, a.duration_minutes,
+      a.title as assignment_title, a.duration_minutes, a.type as assignment_type, a.type as task_type, a.task_category,
       sc.id as score_id, sc.overall_band, sc.is_published,
       (SELECT COUNT(*) FROM violation_logs vl WHERE vl.attempt_id = att.id) as violation_count
     FROM attempts att
@@ -1688,6 +1720,10 @@ app.get('/api/teacher/submissions', authenticateTeacher, (req, res) => {
   if (status) {
     sql += ' AND att.status = ?';
     params.push(status);
+  }
+  if (selectedType) {
+    sql += ' AND (a.type = ? OR a.task_type = ?)';
+    params.push(selectedType, selectedType);
   }
 
   sql += ' ORDER BY att.created_at DESC';
@@ -1926,14 +1962,15 @@ app.get('/api/teacher/export/docx/:attemptId', authenticateTeacher, async (req, 
 
 app.get('/api/teacher/export/zip', authenticateTeacher, async (req, res) => {
   try {
-    const { classId, assignmentId, status } = req.query;
+    const { classId, assignmentId, status, taskType, type } = req.query;
+    const selectedType = (taskType || type || '').toUpperCase();
 
     let sql = `
       SELECT 
         att.*,
         s.full_name, s.student_code,
         c.id as class_id, c.name as class_name,
-        a.title as assignment_title
+        a.title as assignment_title, a.type as assignment_type, a.type as task_type, a.task_category
       FROM attempts att
       JOIN students s ON att.student_id = s.id
       JOIN classes c ON s.class_id = c.id
@@ -1956,6 +1993,10 @@ app.get('/api/teacher/export/zip', authenticateTeacher, async (req, res) => {
     } else {
       sql += " AND att.status IN ('SUBMITTED', 'CANCELLED', 'EXPIRED', 'IN_PROGRESS')";
     }
+    if (selectedType) {
+      sql += ' AND (a.type = ? OR a.task_type = ?)';
+      params.push(selectedType, selectedType);
+    }
 
     sql += ' ORDER BY c.name ASC, s.full_name ASC';
     const rows = query(sql, params);
@@ -1971,7 +2012,10 @@ app.get('/api/teacher/export/zip', authenticateTeacher, async (req, res) => {
         class_name: r.class_name
       },
       assignment: {
-        title: r.assignment_title
+        title: r.assignment_title,
+        type: r.assignment_type || r.task_type || 'TASK_1',
+        task_type: r.task_type || r.assignment_type || 'TASK_1',
+        task_category: r.task_category
       },
       attempt: {
         id: r.id,
@@ -1989,7 +2033,8 @@ app.get('/api/teacher/export/zip', authenticateTeacher, async (req, res) => {
 
     const classLabel = classId ? sanitizeFilenamePart(rows[0].class_name, 'Lop') : 'Tat_Ca_Lop';
     const assignLabel = assignmentId ? `_${sanitizeFilenamePart(rows[0].assignment_title, 'Writing')}` : '';
-    const zipFilename = `Bai_Writing_${classLabel}${assignLabel}.zip`;
+    const taskLabel = selectedType ? `_${selectedType}` : '';
+    const zipFilename = `Bai_Writing_${classLabel}${assignLabel}${taskLabel}.zip`;
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader(
@@ -2004,14 +2049,15 @@ app.get('/api/teacher/export/zip', authenticateTeacher, async (req, res) => {
 });
 
 app.get('/api/teacher/export/excel', authenticateTeacher, (req, res) => {
-  const { classId, assignmentId } = req.query;
+  const { classId, assignmentId, taskType, type } = req.query;
+  const selectedType = (taskType || type || '').toUpperCase();
 
   let sql = `
     SELECT 
       att.id, att.start_time, att.submitted_at, att.word_count, att.status,
       s.full_name, s.student_code, s.id as student_id,
       c.name as class_name,
-      a.title as assignment_title,
+      a.title as assignment_title, a.duration_minutes, a.type as assignment_type, a.type as task_type, a.task_category,
       sc.task_achievement, sc.coherence_cohesion, sc.lexical_resource, sc.grammatical_accuracy,
       sc.overall_band, sc.general_feedback,
       (SELECT COUNT(*) FROM violation_logs vl WHERE vl.attempt_id = att.id) as violation_count
@@ -2031,13 +2077,18 @@ app.get('/api/teacher/export/excel', authenticateTeacher, (req, res) => {
     sql += ' AND a.id = ?';
     params.push(assignmentId);
   }
+  if (selectedType) {
+    sql += ' AND (a.type = ? OR a.task_type = ?)';
+    params.push(selectedType, selectedType);
+  }
   sql += ' ORDER BY c.name ASC, s.full_name ASC';
 
   const rows = query(sql, params);
   const buffer = generateSubmissionsExcel(rows);
 
+  const fileLabel = selectedType === 'TASK_2' ? 'Task_2' : (selectedType === 'TASK_1' ? 'Task_1' : 'Writing');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', 'attachment; filename="Ket_Qua_IELTS_Task_1.xlsx"');
+  res.setHeader('Content-Disposition', `attachment; filename="Ket_Qua_IELTS_${fileLabel}.xlsx"`);
   res.send(buffer);
 });
 

@@ -126,8 +126,10 @@ export default function StudentAssignments({ student, onSelectAssignment, onLogo
               >
                 <div className="space-y-1.5 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
-                      Buổi Writing
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                      item.type === 'TASK_2' ? 'text-purple-700 bg-purple-50 border border-purple-200' : 'text-blue-600 bg-blue-50 border border-blue-200'
+                    }`}>
+                      {item.type === 'TASK_2' ? 'IELTS Task 2 (40:00)' : 'IELTS Task 1 (20:00)'}
                     </span>
                     {renderStatusBadge(item.attempt_status)}
                   </div>

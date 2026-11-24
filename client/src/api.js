@@ -206,3 +206,24 @@ export const TASK_1_CATEGORIES = {
   PROCESS: 'Quy trình (Process Diagram)',
   MIXED: 'Biểu đồ kết hợp (Mixed / Multiple Charts)'
 };
+
+// IELTS Task 2 Category Vietnamese Labels
+export const TASK_2_CATEGORIES = {
+  OPINION: 'Ý kiến (Opinion / Agree or Disagree)',
+  DISCUSSION: 'Thảo luận 2 quan điểm (Discuss Both Views)',
+  ADVANTAGES_DISADVANTAGES: 'Ưu điểm & Nhược điểm (Advantages & Disadvantages)',
+  PROBLEM_SOLUTION: 'Nguyên nhân & Giải pháp (Problems / Causes & Solutions)',
+  TWO_PART: 'Câu hỏi 2 phần (Two-Part Question)'
+};
+
+export const TASK_TYPES = {
+  TASK_1: 'IELTS Academic Writing Task 1',
+  TASK_2: 'IELTS Academic Writing Task 2'
+};
+
+export function getCategoryLabelClient(taskType, category) {
+  if (taskType === 'TASK_2') {
+    return TASK_2_CATEGORIES[category] || category || 'Bài luận Task 2';
+  }
+  return TASK_1_CATEGORIES[category] || category || 'Biểu đồ Task 1';
+}

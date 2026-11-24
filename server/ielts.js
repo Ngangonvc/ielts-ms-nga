@@ -56,7 +56,35 @@ function calculateOverallBand(ta, cc, lr, gra) {
   };
 }
 
+const TASK_1_CATEGORIES = {
+  LINE_GRAPH: 'Biểu đồ đường (Line Graph)',
+  BAR_CHART: 'Biểu đồ cột (Bar Chart)',
+  PIE_CHART: 'Biểu đồ tròn (Pie Chart)',
+  TABLE: 'Bảng số liệu (Table)',
+  MAP: 'Bản đồ (Map)',
+  PROCESS: 'Quy trình (Process Diagram)',
+  MIXED: 'Biểu đồ kết hợp (Mixed / Multiple Charts)'
+};
+
+const TASK_2_CATEGORIES = {
+  OPINION: 'Ý kiến (Opinion / Agree or Disagree)',
+  DISCUSSION: 'Thảo luận 2 quan điểm (Discuss Both Views)',
+  ADVANTAGES_DISADVANTAGES: 'Ưu điểm & Nhược điểm (Advantages & Disadvantages)',
+  PROBLEM_SOLUTION: 'Nguyên nhân & Giải pháp (Problems / Causes & Solutions)',
+  TWO_PART: 'Câu hỏi 2 phần (Two-Part Question)'
+};
+
+function getCategoryLabel(taskType, category) {
+  if (taskType === 'TASK_2') {
+    return TASK_2_CATEGORIES[category] || category || 'Bài luận Task 2';
+  }
+  return TASK_1_CATEGORIES[category] || category || 'Biểu đồ Task 1';
+}
+
 module.exports = {
   countWords,
-  calculateOverallBand
+  calculateOverallBand,
+  TASK_1_CATEGORIES,
+  TASK_2_CATEGORIES,
+  getCategoryLabel
 };

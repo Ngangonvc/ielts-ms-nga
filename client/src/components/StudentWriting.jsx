@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { apiRequest, countWordsClient, getStudentToken, setStudentToken, TASK_1_CATEGORIES } from '../api';
+import {
+  apiRequest,
+  countWordsClient,
+  getStudentToken,
+  setStudentToken,
+  TASK_1_CATEGORIES,
+  TASK_2_CATEGORIES,
+  getCategoryLabelClient
+} from '../api';
 import {
   Clock,
   AlertTriangle,
@@ -309,8 +317,9 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
       isCancelledRef.current = ['CANCELLED', 'INVALIDATED'].includes(res.attempt.status);
 
       if (res.attempt.status === 'IN_PROGRESS') {
+        const startDuration = res.assignment?.duration_minutes || (res.assignment?.type === 'TASK_2' ? 40 : 20);
         startClientCountdown(res.attempt.deadline_time);
-        showToast('Bắt đầu tính giờ thi 20 phút. Chúc bạn làm bài tốt!');
+        showToast(`Bắt đầu tính giờ thi ${startDuration} phút. Chúc bạn làm bài tốt!`);
       }
     } catch (err) {
       if (err.message && (err.message.includes('CANCELLED') || err.message.includes('hủy'))) {
@@ -558,7 +567,8 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
   }
 
   function formatTime(totalSec) {
-    if (totalSec === null || totalSec === undefined) return '20:00';
+    const isTask2 = assignment?.type === 'TASK_2' || assignment?.task_type === 'TASK_2';
+    if (totalSec === null || totalSec === undefined) return isTask2 ? '40:00' : '20:00';
     const m = Math.floor(totalSec / 60);
     const s = totalSec % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
@@ -625,6 +635,12 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
   const isSubmitted = attempt?.status === 'SUBMITTED';
   const isAutoSubmitted = ['AUTO-SUBMITTED', 'AUTO_SUBMITTED', 'EXPIRED'].includes(attempt?.status);
   const chartImages = assignment?.image_urls || [];
+  const isTask2 = assignment?.type === 'TASK_2' || assignment?.task_type === 'TASK_2';
+  const taskLabel = isTask2 ? 'Academic Writing Task 2' : 'Academic Writing Task 1';
+  const minWords = isTask2 ? 250 : 150;
+  const standardDuration = isTask2 ? 40 : 20;
+  const examDuration = assignment?.duration_minutes || standardDuration;
+  const categoryLabel = getCategoryLabelClient(isTask2 ? 'TASK_2' : 'TASK_1', assignment?.task_category);
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans select-none">
@@ -649,7 +665,9 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
               </button>
             )}
             <div className="flex items-center gap-2">
-              <span className="w-7 h-7 bg-blue-600 text-white rounded-lg flex items-center justify-center font-black text-xs shadow-xs">
+              <span className={`w-7 h-7 text-white rounded-lg flex items-center justify-center font-black text-xs shadow-xs ${
+                isTask2 ? 'bg-purple-600' : 'bg-blue-600'
+              }`}>
                 N
               </span>
               <div className="leading-tight">
@@ -657,7 +675,7 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
                   IELTS Ms Nga
                 </span>
                 <span className="hidden sm:inline text-xs text-slate-400 font-normal ml-2 border-l border-slate-200 pl-2">
-                  Academic Writing Task 1
+                  {taskLabel}
                 </span>
               </div>
             </div>
@@ -679,13 +697,13 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
               <span>Words: {wordCount}</span>
               <span
                 className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                  wordCount >= 150
+                  wordCount >= minWords
                     ? 'bg-green-100 text-green-700 border border-green-200'
                     : 'bg-slate-200 text-slate-600'
                 }`}
-                title="Yêu cầu tối thiểu 150 từ cho IELTS Task 1 (vẫn nộp được nếu dưới 150 từ)"
+                title={`Yêu cầu tối thiểu ${minWords} từ cho IELTS ${isTask2 ? 'Task 2' : 'Task 1'} (vẫn nộp được nếu dưới ${minWords} từ)`}
               >
-                Min 150
+                Min {minWords}
               </span>
             </div>
 
@@ -696,7 +714,7 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
             )}
           </div>
 
-          {/* Right: 20-Minute Countdown Timer & Submit Button */}
+          {/* Right: Countdown Timer & Submit Button */}
           <div className="flex items-center gap-2 sm:gap-3">
             {isWritingActive && (
               <div
@@ -802,22 +820,27 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
 
         {/* Dual-Pane Layout: Left Pane = Prompt & Chart, Right Pane = Writing Area */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch min-h-[580px]">
-          {/* LEFT PANE: Task 1 Instructions, Question Prompt & Chart Image */}
+          {/* LEFT PANE: Task 1 or Task 2 Instructions, Question Prompt & Chart Image */}
           <div className="bg-white rounded-2xl shadow-xs border border-slate-200 p-4 sm:p-5 flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-140px)]">
             {/* Header info */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 gap-2">
-              <span className="px-2.5 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded-lg uppercase tracking-wide">
-                {TASK_1_CATEGORIES[assignment?.task_category] || assignment?.task_category || 'Writing Task 1'}
+              <span className={`px-2.5 py-1 text-xs font-bold rounded-lg uppercase tracking-wide border ${
+                isTask2 ? 'bg-purple-50 text-purple-800 border-purple-200' : 'bg-blue-50 text-blue-800 border-blue-200'
+              }`}>
+                {categoryLabel}
               </span>
               <span className="text-xs text-slate-500 font-medium">
-                Thời gian: 20 phút • Tối thiểu: 150 từ
+                Thời gian: {examDuration} phút • Tối thiểu: {minWords} từ
               </span>
             </div>
 
-            {/* IELTS Task 1 Standard Instructions Box */}
+            {/* IELTS Standard Instructions Box */}
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 italic space-y-1">
-              <p>You should spend about <strong>20 minutes</strong> on this task.</p>
-              <p>Write at least <strong>150 words</strong>.</p>
+              <p>You should spend about <strong>{examDuration} minutes</strong> on this task.</p>
+              <p>Write at least <strong>{minWords} words</strong>.</p>
+              {isTask2 && (
+                <p>Give reasons for your answer and include any relevant examples from your own knowledge or experience.</p>
+              )}
             </div>
 
             {/* Question Prompt */}
@@ -826,11 +849,11 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
                 {assignment?.title}
               </h2>
               <p className="text-sm sm:text-base text-slate-800 leading-relaxed font-serif whitespace-pre-line">
-                {assignment?.prompt_question || 'The chart below shows information about the topic. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.'}
+                {assignment?.prompt_question || (isTask2 ? 'Give reasons for your answer and include any relevant examples from your own knowledge or experience.' : 'The chart below shows information about the topic. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.')}
               </p>
             </div>
 
-            {/* Uploaded Chart Image Display */}
+            {/* Uploaded Chart Image Display or Task 2 Essay Structure Guidance */}
             {chartImages.length > 0 ? (
               <div className="mt-1 flex-1 flex flex-col">
                 <div className="text-xs font-semibold text-slate-500 mb-2 flex items-center justify-between">
@@ -849,7 +872,7 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
                     >
                       <img
                         src={imgUrl}
-                        alt={`IELTS Task 1 Chart ${idx + 1}`}
+                        alt={`IELTS Chart ${idx + 1}`}
                         className="max-h-[360px] w-auto mx-auto object-contain rounded-lg"
                       />
                       <button
@@ -862,6 +885,19 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
                     </div>
                   ))}
                 </div>
+              </div>
+            ) : isTask2 ? (
+              <div className="mt-2 p-4 bg-gradient-to-br from-purple-50/70 to-indigo-50/50 rounded-2xl border border-purple-100/80">
+                <div className="flex items-center gap-2 text-xs font-bold text-purple-900 mb-2">
+                  <FileText className="w-4 h-4 text-purple-600" />
+                  <span>Gợi ý cấu trúc bài luận IELTS Writing Task 2 chuẩn:</span>
+                </div>
+                <ul className="text-xs text-slate-700 space-y-1.5 list-disc pl-4 leading-relaxed font-sans">
+                  <li><strong>Introduction:</strong> Mở bài bằng cách paraphrase lại câu hỏi đề thi và nêu rõ quan điểm / lập trường (Thesis Statement).</li>
+                  <li><strong>Body Paragraph 1:</strong> Luận điểm chính thứ nhất kèm lý lẽ giải thích sâu và ví dụ thực tế minh họa.</li>
+                  <li><strong>Body Paragraph 2:</strong> Luận điểm chính thứ hai kèm phân tích và dẫn chứng liên quan.</li>
+                  <li><strong>Conclusion:</strong> Kết luận tóm tắt lại các luận điểm trọng tâm và tái khẳng định quan điểm cuối cùng.</li>
+                </ul>
               </div>
             ) : (
               <div className="p-6 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center text-xs text-slate-400">
@@ -902,7 +938,7 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
                 disabled={!isWritingActive}
                 placeholder={
                   isWritingActive
-                    ? 'Write your IELTS Academic Task 1 essay here...\n\n(Lưu ý: Không chuyển tab hoặc rời màn hình làm bài vì hệ thống sẽ lập tức HỦY bài thi).'
+                    ? `Write your IELTS Academic ${isTask2 ? 'Task 2' : 'Task 1'} essay here...\n\n(Lưu ý: Không chuyển tab hoặc rời màn hình làm bài vì hệ thống sẽ lập tức HỦY bài thi).`
                     : '(Bài viết đang ở chế độ xem lại / đã kết thúc)'
                 }
                 className={`flex-1 w-full min-h-[380px] p-3.5 text-slate-900 ielts-writing-textarea rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all ${
@@ -923,12 +959,12 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
                 </span>
                 <span
                   className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold ${
-                    wordCount >= 150
+                    wordCount >= minWords
                       ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                       : 'bg-amber-100 text-amber-900 border border-amber-300'
                   }`}
                 >
-                  {wordCount >= 150 ? '✓ Đạt chuẩn 150 từ' : 'Minimum recommended: 150 words (Tối thiểu 150 từ)'}
+                  {wordCount >= minWords ? `✓ Đạt chuẩn ${minWords} từ` : `Minimum recommended: ${minWords} words (Tối thiểu ${minWords} từ)`}
                 </span>
               </div>
 
@@ -970,7 +1006,7 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
               </div>
               <div>
                 <h3 className="font-extrabold text-lg sm:text-xl">IELTS Ms Nga - Phòng Thi Writing</h3>
-                <p className="text-blue-100 text-xs">IELTS Academic Writing Task 1 • Thời gian: 20 phút</p>
+                <p className="text-blue-100 text-xs">IELTS Academic {isTask2 ? 'Writing Task 2' : 'Writing Task 1'} • Thời gian: {examDuration} phút • Tối thiểu: {minWords} từ</p>
               </div>
             </div>
 
@@ -978,7 +1014,7 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
             <form onSubmit={handleStartDirectExam} className="p-6 sm:p-7 space-y-4">
               <div>
                 <h4 className="text-base font-bold text-slate-900 mb-1">
-                  {assignment?.title || 'Đề thi IELTS Academic Task 1'}
+                  {assignment?.title || `Đề thi IELTS Academic ${isTask2 ? 'Task 2' : 'Task 1'}`}
                 </h4>
                 <p className="text-xs text-slate-500">
                   Vui lòng điền đúng Họ tên và Lớp của bạn trước khi bấm bắt đầu làm bài.
@@ -1088,7 +1124,7 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
                       <span>Đang vào phòng thi...</span>
                     </>
                   ) : (
-                    <span>BẮT ĐẦU THI / START EXAM (20:00)</span>
+                    <span>BẮT ĐẦU THI / START EXAM ({formatTime(examDuration * 60)})</span>
                   )}
                 </button>
               </div>
@@ -1108,13 +1144,13 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
             <p className="text-slate-600 text-sm mb-4 leading-relaxed">
               Tổng số từ hiện tại của bạn: <strong>{wordCount} từ</strong>.
               <br />
-              {wordCount < 150 ? (
+              {wordCount < minWords ? (
                 <span className="text-xs text-amber-600 font-semibold block mt-1">
-                  (Bài viết chưa đạt 150 từ theo chuẩn IELTS, nhưng bạn vẫn có thể nộp bình thường)
+                  (Bài viết chưa đạt {minWords} từ theo chuẩn IELTS, nhưng bạn vẫn có thể nộp bình thường)
                 </span>
               ) : (
                 <span className="text-xs text-green-600 font-semibold block mt-1">
-                  (Bài viết đã đạt trên 150 từ tiêu chuẩn)
+                  (Bài viết đã đạt trên {minWords} từ tiêu chuẩn)
                 </span>
               )}
             </p>

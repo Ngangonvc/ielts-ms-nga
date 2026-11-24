@@ -1,14 +1,15 @@
 {
   "name": "ielts-writing-classroom",
   "version": "1.0.0",
-  "description": "IELTS Academic Writing Task 1 Classroom Web Application",
+  "description": "IELTS Academic Writing Task 1 and Task 2 Classroom Web Application",
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
     "build": "cd client && npm install && npm run build",
     "build:client": "cd client && npm run build",
-    "test": "node test/test-all-14-scenarios.js && node test/test-suite.js",
+    "test": "node test/test-all-14-scenarios.js && node test/test-task2-scenarios.js && node test/test-suite.js",
     "test:14": "node test/test-all-14-scenarios.js",
+    "test:task2": "node test/test-task2-scenarios.js",
     "test:regression": "node test/test-suite.js"
   },
   "keywords": [
