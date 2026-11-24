@@ -84,7 +84,7 @@ export default function StudentLogin({ onLoginSuccess, onSwitchToTeacher }) {
             <GraduationCap className="w-8 h-8 text-blue-100" />
           </div>
           <h1 className="text-2xl font-black tracking-tight">IELTS Ms Nga</h1>
-          <p className="text-blue-100 text-xs sm:text-sm mt-1">Cổng Làm Bài Thi IELTS Academic Writing Task 1</p>
+          <p className="text-blue-100 text-xs sm:text-sm mt-1">Cổng Làm Bài Thi IELTS Academic Writing (Task 1 & Task 2)</p>
         </div>
 
         {/* Direct Exam Entry Banner (No Login / No Account needed) */}
