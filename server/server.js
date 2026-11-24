@@ -694,11 +694,18 @@ app.post('/api/assignments', authenticateTeacher, upload.array('images', 5), (re
     }
 
     const resolvedType = (taskType || type || 'TASK_1').toUpperCase();
-    const defaultDuration = resolvedType === 'TASK_2' ? 40 : 20;
-    const defaultCategory = resolvedType === 'TASK_2' ? 'OPINION' : 'LINE_GRAPH';
-    const parsedDuration = Math.min(240, Math.max(1, parseInt(durationMinutes, 10) || defaultDuration));
+    const isTask2 = resolvedType === 'TASK_2';
+    const defaultDuration = isTask2 ? 40 : 20;
+    const defaultCategory = isTask2 ? 'OPINION' : 'LINE_GRAPH';
+    const parsedDuration = isTask2
+      ? Math.max(40, parseInt(durationMinutes, 10) || 40)
+      : Math.min(240, Math.max(1, parseInt(durationMinutes, 10) || defaultDuration));
+    const defaultInstructions = isTask2
+      ? 'You should spend about 40 minutes on this task. Write at least 250 words.'
+      : 'You should spend about 20 minutes on this task. Write at least 150 words.';
+    const resolvedInstructions = (instructions && instructions.toString().trim()) || defaultInstructions;
     const resolvedCategory = taskCategory || defaultCategory;
-    const imageUrls = req.files ? req.files.map(f => `/uploads/${f.filename}`) : [];
+    const imageUrls = isTask2 ? [] : (req.files ? req.files.map(f => `/uploads/${f.filename}`) : []);
 
     const id = 'a-' + uuidv4().slice(0, 8);
     run(
@@ -710,7 +717,7 @@ app.post('/api/assignments', authenticateTeacher, upload.array('images', 5), (re
         resolvedType,
         resolvedCategory,
         title.toString().trim(),
-        (instructions || '').toString().trim(),
+        resolvedInstructions,
         (promptQuestion || '').toString().trim(),
         JSON.stringify(imageUrls),
         classId,
@@ -756,23 +763,35 @@ app.put('/api/assignments/:id', authenticateTeacher, upload.array('images', 5), 
     } = req.body || {};
 
     const updatedType = (taskType || type || existing.type || existing.task_type || 'TASK_1').toUpperCase();
-    const defaultDuration = updatedType === 'TASK_2' ? 40 : 20;
+    const isTask2 = updatedType === 'TASK_2';
+    const defaultDuration = isTask2 ? 40 : 20;
 
     let keptImages = [];
-    if (existingImages) {
-      try {
-        keptImages = Array.isArray(existingImages) ? existingImages : JSON.parse(existingImages);
-      } catch (e) {
-        keptImages = [existingImages];
+    if (!isTask2) {
+      if (existingImages) {
+        try {
+          keptImages = Array.isArray(existingImages) ? existingImages : JSON.parse(existingImages);
+        } catch (e) {
+          keptImages = [existingImages];
+        }
+      } else if (existing.image_urls) {
+        try {
+          keptImages = JSON.parse(existing.image_urls);
+        } catch (_) {}
       }
-    } else if (existing.image_urls) {
-      try {
-        keptImages = JSON.parse(existing.image_urls);
-      } catch (_) {}
     }
 
-    const newImages = req.files ? req.files.map(f => `/uploads/${f.filename}`) : [];
-    const allImages = [...keptImages, ...newImages];
+    const newImages = (!isTask2 && req.files) ? req.files.map(f => `/uploads/${f.filename}`) : [];
+    const allImages = isTask2 ? [] : [...keptImages, ...newImages];
+    const defaultInstructions = isTask2
+      ? 'You should spend about 40 minutes on this task. Write at least 250 words.'
+      : 'You should spend about 20 minutes on this task. Write at least 150 words.';
+    const finalInstructions = instructions !== undefined
+      ? instructions.toString().trim()
+      : (existing.instructions || defaultInstructions);
+    const parsedDuration = isTask2
+      ? Math.max(40, parseInt(durationMinutes, 10) || 40)
+      : (durationMinutes !== undefined ? Math.min(240, Math.max(1, parseInt(durationMinutes, 10) || defaultDuration)) : existing.duration_minutes);
 
     run(
       `UPDATE assignments SET 
@@ -784,11 +803,11 @@ app.put('/api/assignments/:id', authenticateTeacher, upload.array('images', 5), 
         updatedType,
         taskCategory !== undefined ? taskCategory : existing.task_category,
         title !== undefined ? title.toString().trim() : existing.title,
-        instructions !== undefined ? instructions.toString().trim() : (existing.instructions || ''),
+        finalInstructions,
         promptQuestion !== undefined ? promptQuestion.toString().trim() : (existing.prompt_question || ''),
         JSON.stringify(allImages),
         classId !== undefined ? classId : existing.class_id,
-        durationMinutes !== undefined ? Math.min(240, Math.max(1, parseInt(durationMinutes, 10) || defaultDuration)) : existing.duration_minutes,
+        parsedDuration,
         status !== undefined ? status : existing.status,
         req.params.id
       ]
@@ -1060,6 +1079,9 @@ app.get('/api/exam/:id/public', (req, res) => {
 
     const classes = query('SELECT id, name FROM classes ORDER BY name ASC');
     const assignedClass = get('SELECT id, name FROM classes WHERE id = ?', [assignment.class_id]);
+    const isTask2 = (assignment.type || assignment.task_type) === 'TASK_2';
+    const resolvedDuration = isTask2 ? Math.max(40, assignment.duration_minutes || 40) : (assignment.duration_minutes || 20);
+    const resolvedImages = isTask2 ? [] : (assignment.image_urls ? JSON.parse(assignment.image_urls) : []);
 
     res.json({
       assignment: {
@@ -1070,8 +1092,8 @@ app.get('/api/exam/:id/public', (req, res) => {
         title: assignment.title,
         instructions: assignment.instructions,
         prompt_question: assignment.prompt_question,
-        image_urls: assignment.image_urls ? JSON.parse(assignment.image_urls) : [],
-        duration_minutes: assignment.duration_minutes || (assignment.type === 'TASK_2' ? 40 : 20),
+        image_urls: resolvedImages,
+        duration_minutes: resolvedDuration,
         status: assignment.status,
         class_name: assignedClass?.name || ''
       },
@@ -1208,7 +1230,8 @@ app.post('/api/exam/:id/start-direct', async (req, res) => {
     }
 
     const attemptId = 'att-' + uuidv4().slice(0, 8);
-    const durationMinutes = assignment.duration_minutes || 20;
+    const isTask2 = (assignment.type || assignment.task_type) === 'TASK_2';
+    const durationMinutes = isTask2 ? Math.max(40, assignment.duration_minutes || 40) : (assignment.duration_minutes || 20);
     const deadlineTime = now + (durationMinutes * 60 * 1000);
 
     run(
@@ -1502,7 +1525,9 @@ app.post('/api/student/assignments/:id/start', authenticateStudent, (req, res) =
 
   // Create brand new attempt
   const attemptId = 'att-' + uuidv4().slice(0, 8);
-  const durationMs = (assignment.duration_minutes || 20) * 60 * 1000;
+  const isTask2 = (assignment.type || assignment.task_type) === 'TASK_2';
+  const durationMinutes = isTask2 ? Math.max(40, assignment.duration_minutes || 40) : (assignment.duration_minutes || 20);
+  const durationMs = durationMinutes * 60 * 1000;
   const deadline = now + durationMs;
 
   run(

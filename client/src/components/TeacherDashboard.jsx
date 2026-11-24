@@ -321,8 +321,10 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
       formData.append('durationMinutes', Math.min(240, Math.max(1, parseInt(newDuration, 10) || defaultDuration)));
       formData.append('status', startImmediately ? 'PUBLISHED' : 'DRAFT');
 
-      for (const file of newChartFiles) {
-        formData.append('images', file);
+      if (newTaskType === 'TASK_1') {
+        for (const file of newChartFiles) {
+          formData.append('images', file);
+        }
       }
 
       const res = await apiRequest('/assignments', 'POST', formData, true);
@@ -383,10 +385,14 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
       formData.append('instructions', editInstructions.trim());
       formData.append('promptQuestion', editPromptQuestion.trim());
       formData.append('status', editStatus);
-      formData.append('existingImages', JSON.stringify(editExistingImages));
 
-      for (const file of editNewFiles) {
-        formData.append('images', file);
+      if (editTaskType === 'TASK_1') {
+        formData.append('existingImages', JSON.stringify(editExistingImages));
+        for (const file of editNewFiles) {
+          formData.append('images', file);
+        }
+      } else {
+        formData.append('existingImages', '[]');
       }
 
       await apiRequest(`/assignments/${editingAssignment.id}`, 'PUT', formData, true);
@@ -834,33 +840,31 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                  <span>
-                    {newTaskType === 'TASK_2'
-                      ? 'Ảnh/Tài liệu đính kèm (Không bắt buộc cho Task 2)'
-                      : 'Tải lên ảnh biểu đồ (Bar, Line, Pie, Table, Process, Map, Mixed)'}
-                  </span>
-                  <span className="text-slate-400 text-[11px]">Hỗ trợ JPG, PNG, WEBP, SVG tối đa 10MB</span>
-                </label>
-                <input
-                  type="file"
-                  multiple
-                  accept=".jpg,.jpeg,.png,.webp,.svg"
-                  onChange={handleChartFilesChange}
-                  className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-                />
+              {newTaskType === 'TASK_1' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>Tải lên ảnh biểu đồ Task 1 (Bar, Line, Pie, Table, Process, Map, Mixed)</span>
+                    <span className="text-slate-400 text-[11px]">Hỗ trợ JPG, PNG, WEBP, SVG tối đa 10MB</span>
+                  </label>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".jpg,.jpeg,.png,.webp,.svg"
+                    onChange={handleChartFilesChange}
+                    className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                  />
 
-                {chartPreviews.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {chartPreviews.map((url, i) => (
-                      <div key={i} className="relative w-20 h-20 border border-slate-200 rounded-lg overflow-hidden bg-slate-50 p-1">
-                        <img src={url} alt="Preview" className="w-full h-full object-contain" />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                  {chartPreviews.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {chartPreviews.map((url, i) => (
+                        <div key={i} className="relative w-20 h-20 border border-slate-200 rounded-lg overflow-hidden bg-slate-50 p-1">
+                          <img src={url} alt="Preview" className="w-full h-full object-contain" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -1664,20 +1668,22 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Tải thêm ảnh biểu đồ mới</label>
-                <input
-                  type="file"
-                  multiple
-                  accept=".jpg,.jpeg,.png,.webp,.svg"
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files || []);
-                    setEditNewFiles(files);
-                    setEditPreviews(files.map((f) => URL.createObjectURL(f)));
-                  }}
-                  className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 cursor-pointer"
-                />
-              </div>
+              {editTaskType === 'TASK_1' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tải thêm ảnh biểu đồ mới</label>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".jpg,.jpeg,.png,.webp,.svg"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      setEditNewFiles(files);
+                      setEditPreviews(files.map((f) => URL.createObjectURL(f)));
+                    }}
+                    className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 cursor-pointer"
+                  />
+                </div>
+              )}
 
               <div className="pt-3 flex justify-end gap-2">
                 <button

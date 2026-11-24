@@ -181,6 +181,22 @@ async function initDb() {
   try {
     dbInstance.run("UPDATE assignments SET task_type = COALESCE(type, 'TASK_1') WHERE task_type IS NULL OR task_type = ''");
     dbInstance.run("UPDATE assignments SET type = COALESCE(task_type, 'TASK_1') WHERE type IS NULL OR type = ''");
+    // Ensure all Task 2 assignments are configured with 40 minutes, 250 words, and no chart requirements
+    dbInstance.run(`
+      UPDATE assignments
+      SET duration_minutes = 40
+      WHERE (type = 'TASK_2' OR task_type = 'TASK_2') AND (duration_minutes IS NULL OR duration_minutes <= 20)
+    `);
+    dbInstance.run(`
+      UPDATE assignments
+      SET image_urls = '[]'
+      WHERE (type = 'TASK_2' OR task_type = 'TASK_2') AND (image_urls IS NULL OR image_urls = '' OR image_urls LIKE '%sample-life-expectancy%')
+    `);
+    dbInstance.run(`
+      UPDATE assignments
+      SET instructions = 'You should spend about 40 minutes on this task. Write at least 250 words.'
+      WHERE (type = 'TASK_2' OR task_type = 'TASK_2') AND (instructions LIKE '%20 minutes%' OR instructions LIKE '%150 words%' OR instructions IS NULL OR instructions = '')
+    `);
   } catch (_) {}
 
   // Seed default teacher if not present

@@ -31,6 +31,16 @@ function getDraftBackupKey(attemptId) {
   return `ielts_draft_backup_${attemptId}`;
 }
 
+function cleanTask2Prompt(raw) {
+  if (!raw) return '';
+  return raw
+    .replace(/You should spend about (20|40) minutes on this task\.?/gi, '')
+    .replace(/Write at least (150|250) words\.?/gi, '')
+    .replace(/Give reasons for your answer and include any relevant examples from your own knowledge or experience\.?/gi, '')
+    .replace(/Write about the following topic:?/gi, '')
+    .trim();
+}
+
 function saveLocalDraftBackup(attemptId, content) {
   if (!attemptId) return;
   try {
@@ -472,7 +482,8 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
           content: contentRef.current
         }).catch(() => {});
         e.preventDefault();
-        e.returnValue = 'Bạn đang trong giờ làm bài Writing Task 1. Rời khỏi trang sẽ làm BÀI THI BỊ HỦY!';
+        const currentTask = (assignment?.type === 'TASK_2' || assignment?.task_type === 'TASK_2') ? 'Writing Task 2' : 'Writing Task 1';
+        e.returnValue = `Bạn đang trong giờ làm bài ${currentTask}. Rời khỏi trang sẽ làm BÀI THI BỊ HỦY!`;
         return e.returnValue;
       }
     };
@@ -492,15 +503,16 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
       window.removeEventListener('pagehide', handlePageHide);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [attempt?.status, attempt?.id]);
+  }, [attempt?.status, attempt?.id, assignment?.type, assignment?.task_type]);
 
   // Copy & Paste Restrictions
   function recordPasteViolation() {
     showToast('⚠️ Chức năng Dán (Paste) đã bị khóa theo quy chế thi IELTS Ms Nga!');
     if (attemptRef.current && attemptRef.current.status === 'IN_PROGRESS' && !isCancelledRef.current) {
+      const currentTask = (assignment?.type === 'TASK_2' || assignment?.task_type === 'TASK_2') ? 'Task 2' : 'Task 1';
       apiRequest(`/student/attempts/${attemptRef.current.id}/violation`, 'POST', {
         eventType: 'PASTE_ATTEMPT',
-        details: 'Cố ý dán văn bản vào khung bài viết Task 1',
+        details: `Cố ý dán văn bản vào khung bài viết ${currentTask}`,
         currentContent: contentRef.current
       }).catch(() => {});
     }
@@ -566,9 +578,21 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
     }
   }
 
+  function handleGoBack() {
+    if (onSelectAssignment) {
+      onSelectAssignment();
+    } else {
+      window.location.hash = '';
+      window.location.reload();
+    }
+  }
+
   function formatTime(totalSec) {
     const isTask2 = assignment?.type === 'TASK_2' || assignment?.task_type === 'TASK_2';
-    if (totalSec === null || totalSec === undefined) return isTask2 ? '40:00' : '20:00';
+    if (totalSec === null || totalSec === undefined) {
+      const defaultMins = assignment?.duration_minutes || (isTask2 ? 40 : 20);
+      return `${defaultMins.toString().padStart(2, '0')}:00`;
+    }
     const m = Math.floor(totalSec / 60);
     const s = totalSec % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
@@ -577,16 +601,17 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
   // Determine Timer Color Badge:
   // <= 60s -> Red + pulse
   // <= 300s (05:00) -> Orange
-  // else -> Blue
+  // else -> Blue/Purple
   function getTimerBadgeClass() {
     if (timeLeftSeconds === null) return 'bg-blue-50 text-blue-700 border-blue-200';
     if (timeLeftSeconds <= 60) {
-      return 'bg-red-100 text-red-700 border-red-300 animate-pulse';
+      return 'bg-red-100 text-red-700 border-red-400 animate-pulse font-bold';
     }
     if (timeLeftSeconds <= 300) {
-      return 'bg-amber-100 text-amber-800 border-amber-300';
+      return 'bg-orange-100 text-orange-800 border-orange-400 font-bold';
     }
-    return 'bg-blue-50 text-blue-700 border-blue-200';
+    const isTask2 = assignment?.type === 'TASK_2' || assignment?.task_type === 'TASK_2';
+    return isTask2 ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-blue-50 text-blue-700 border-blue-200';
   }
 
   if (loading) {
@@ -595,7 +620,7 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
         <div className="text-center">
           <Loader2 className="w-9 h-9 text-blue-600 animate-spin mx-auto mb-3" />
           <h2 className="text-base font-bold text-slate-800">IELTS Ms Nga</h2>
-          <p className="text-slate-500 text-xs mt-1">Đang tải đề thi Writing Task 1...</p>
+          <p className="text-slate-500 text-xs mt-1">Đang tải đề thi Writing...</p>
         </div>
       </div>
     );
@@ -656,12 +681,12 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
           {/* Left: Brand & Student Details */}
           <div className="flex items-center gap-3 min-w-0">
-            {onSelectAssignment && !isWritingActive && (
+            {!isWritingActive && (
               <button
-                onClick={onSelectAssignment}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-800 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer"
+                onClick={handleGoBack}
+                className="text-xs font-semibold text-slate-700 hover:text-slate-900 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer flex items-center gap-1"
               >
-                ← Quay lại
+                ← {(isSubmitted || isAutoSubmitted || isCancelled) ? 'Về trang chủ' : 'Quay lại'}
               </button>
             )}
             <div className="flex items-center gap-2">
@@ -674,7 +699,7 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
                 <span className="font-extrabold text-blue-900 text-sm sm:text-base tracking-tight">
                   IELTS Ms Nga
                 </span>
-                <span className="hidden sm:inline text-xs text-slate-400 font-normal ml-2 border-l border-slate-200 pl-2">
+                <span className="text-xs font-semibold text-slate-600 ml-2 border-l border-slate-300 pl-2">
                   {taskLabel}
                 </span>
               </div>
@@ -777,217 +802,351 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={loadExamData}
-              className="self-start sm:self-center px-4 py-2 bg-white hover:bg-red-100 text-red-700 border border-red-300 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-xs transition-colors"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Kiểm tra lại trạng thái</span>
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2 self-start sm:self-center">
+              <button
+                type="button"
+                onClick={loadExamData}
+                className="px-4 py-2 bg-white hover:bg-red-100 text-red-700 border border-red-300 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-xs transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Kiểm tra lại trạng thái</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleGoBack}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors"
+              >
+                ← Về trang chủ
+              </button>
+            </div>
           </div>
         )}
 
         {/* Banner if Auto-Submitted */}
         {isAutoSubmitted && (
-          <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-start gap-3.5 shadow-2xs">
-            <Clock className="w-7 h-7 text-amber-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-bold text-amber-900 text-sm sm:text-base">
-                Time is up! Your writing has been automatically submitted.
-              </h3>
-              <p className="text-amber-800 text-xs sm:text-sm mt-1 leading-relaxed">
-                Đã hết 20 phút thời gian làm bài thi! Toàn bộ nội dung bài viết được lưu gần nhất ({attempt?.word_count ?? wordCount} từ) đã được tự động nộp thành công cho giáo viên.
-              </p>
+          <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 shadow-2xs">
+            <div className="flex items-start gap-3.5">
+              <Clock className="w-7 h-7 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-bold text-amber-900 text-sm sm:text-base">
+                  Time is up! Your writing has been automatically submitted.
+                </h3>
+                <p className="text-amber-800 text-xs sm:text-sm mt-1 leading-relaxed">
+                  Đã hết {examDuration} phút thời gian làm bài thi! Toàn bộ nội dung bài viết được lưu gần nhất ({attempt?.word_count ?? wordCount} từ) đã được tự động nộp thành công cho giáo viên.
+                </p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={handleGoBack}
+              className="self-start sm:self-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors flex-shrink-0"
+            >
+              ← Về trang chủ
+            </button>
           </div>
         )}
 
         {/* Banner if Early Submitted */}
         {isSubmitted && (
-          <div className="p-4 bg-green-50 border-2 border-green-300 rounded-2xl flex items-start gap-3.5 shadow-2xs">
-            <CheckCircle2 className="w-7 h-7 text-green-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-bold text-green-900 text-sm sm:text-base">
-                Bài viết đã được nộp thành công (SUBMITTED)
-              </h3>
-              <p className="text-green-800 text-xs sm:text-sm mt-1">
-                Thời gian nộp: {attempt?.submitted_at ? new Date(attempt.submitted_at).toLocaleString('vi-VN') : ''} • Tổng số từ: <strong>{attempt?.word_count ?? wordCount} từ</strong>. Giáo viên sẽ tiến hành chấm theo 4 tiêu chí IELTS.
-              </p>
+          <div className="p-4 bg-green-50 border-2 border-green-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 shadow-2xs">
+            <div className="flex items-start gap-3.5">
+              <CheckCircle2 className="w-7 h-7 text-green-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-bold text-green-900 text-sm sm:text-base">
+                  Bài viết đã được nộp thành công (SUBMITTED)
+                </h3>
+                <p className="text-green-800 text-xs sm:text-sm mt-1">
+                  Thời gian nộp: {attempt?.submitted_at ? new Date(attempt.submitted_at).toLocaleString('vi-VN') : ''} • Tổng số từ: <strong>{attempt?.word_count ?? wordCount} từ</strong>. Giáo viên sẽ tiến hành chấm theo 4 tiêu chí IELTS.
+                </p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={handleGoBack}
+              className="self-start sm:self-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors flex-shrink-0"
+            >
+              ← Về trang chủ
+            </button>
           </div>
         )}
 
-        {/* Dual-Pane Layout: Left Pane = Prompt & Chart, Right Pane = Writing Area */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch min-h-[580px]">
-          {/* LEFT PANE: Task 1 or Task 2 Instructions, Question Prompt & Chart Image */}
-          <div className="bg-white rounded-2xl shadow-xs border border-slate-200 p-4 sm:p-5 flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-140px)]">
-            {/* Header info */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 gap-2">
-              <span className={`px-2.5 py-1 text-xs font-bold rounded-lg uppercase tracking-wide border ${
-                isTask2 ? 'bg-purple-50 text-purple-800 border-purple-200' : 'bg-blue-50 text-blue-800 border-blue-200'
-              }`}>
-                {categoryLabel}
-              </span>
-              <span className="text-xs text-slate-500 font-medium">
-                Thời gian: {examDuration} phút • Tối thiểu: {minWords} từ
-              </span>
+        {/* Main Examination Work Area */}
+        {isTask2 ? (
+          /* ========================================================= */
+          /* IELTS ACADEMIC WRITING TASK 2: ESSAY LAYOUT (NO CHARTS)    */
+          /* ========================================================= */
+          <div className="flex-1 flex flex-col gap-4 max-w-5xl w-full mx-auto">
+            {/* Task 2 Question Card */}
+            <div className="bg-white rounded-2xl shadow-xs border border-slate-200 p-5 sm:p-6 flex flex-col gap-3.5">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 gap-2">
+                <span className="px-2.5 py-1 text-xs font-bold rounded-lg uppercase tracking-wide border bg-purple-50 text-purple-800 border-purple-200">
+                  {categoryLabel}
+                </span>
+                <span className="text-xs text-slate-500 font-medium">
+                  Thời gian: {examDuration} phút • Tối thiểu: 250 từ
+                </span>
+              </div>
+
+              {/* Standard 4-part IELTS Academic Task 2 Instructions */}
+              <div className="space-y-3">
+                <p className="text-xs sm:text-sm text-slate-700 italic font-medium">
+                  You should spend about 40 minutes on this task.
+                </p>
+                <p className="text-xs sm:text-sm text-slate-900 font-bold">
+                  Write about the following topic:
+                </p>
+
+                {/* Exam Topic Box */}
+                <div className="p-4 bg-purple-50/40 rounded-xl border border-purple-100 text-slate-900 font-serif text-sm sm:text-base leading-relaxed whitespace-pre-line shadow-2xs">
+                  {cleanTask2Prompt(assignment?.prompt_question) || assignment?.prompt_question || assignment?.title}
+                </div>
+
+                <p className="text-xs sm:text-sm text-slate-700 italic">
+                  Give reasons for your answer and include any relevant examples from your own knowledge or experience.
+                </p>
+                <p className="text-xs sm:text-sm text-slate-700 italic font-medium">
+                  Write at least 250 words.
+                </p>
+              </div>
             </div>
 
-            {/* IELTS Standard Instructions Box */}
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 italic space-y-1">
-              <p>You should spend about <strong>{examDuration} minutes</strong> on this task.</p>
-              <p>Write at least <strong>{minWords} words</strong>.</p>
-              {isTask2 && (
-                <p>Give reasons for your answer and include any relevant examples from your own knowledge or experience.</p>
+            {/* Task 2 Writing Editor (Right Below Question Card) */}
+            <div className="bg-white rounded-2xl shadow-xs border border-slate-200 p-4 sm:p-6 flex flex-col justify-between flex-1 min-h-[460px]">
+              <div className="flex-1 flex flex-col">
+                <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100 text-xs">
+                  <span className="font-bold text-slate-700 uppercase tracking-tight flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-purple-600" />
+                    <span>Khung Viết Bài / Writing Area (Task 2)</span>
+                  </span>
+                  <span className="text-slate-400 text-[11px]">
+                    {isWritingActive ? 'Đang bật tự động lưu • Chặn Paste' : 'Chế độ chỉ đọc'}
+                  </span>
+                </div>
+
+                <textarea
+                  value={content}
+                  onChange={handleTextChange}
+                  onPaste={handlePasteAttempt}
+                  onBeforeInput={handleBeforeInput}
+                  onKeyDown={handleKeyDown}
+                  onCopy={handleCopyCut}
+                  onCut={handleCopyCut}
+                  onContextMenu={(e) => {
+                    if (isWritingActive) {
+                      e.preventDefault();
+                      showToast('⚠️ Menu ngữ cảnh chuột phải bị hạn chế trong phòng thi!');
+                    }
+                  }}
+                  onDrop={(e) => e.preventDefault()}
+                  disabled={!isWritingActive}
+                  placeholder={
+                    isWritingActive
+                      ? "Write your IELTS Academic Task 2 essay here...\n\n(Lưu ý: Không chuyển tab hoặc rời màn hình làm bài vì hệ thống sẽ lập tức HỦY bài thi)."
+                      : "(Bài viết đang ở chế độ xem lại / đã kết thúc)"
+                  }
+                  className={`flex-1 w-full min-h-[380px] p-4 text-slate-900 ielts-writing-textarea rounded-xl border border-slate-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all text-sm sm:text-base leading-relaxed ${
+                    !isWritingActive ? 'bg-slate-50 cursor-not-allowed opacity-90' : 'bg-white'
+                  }`}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                />
+              </div>
+
+              {/* Bottom Status Bar for Task 2 */}
+              <div className="pt-3 mt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-slate-900 text-sm tracking-tight">
+                    WORDS: {wordCount}
+                  </span>
+                  <span
+                    className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold ${
+                      wordCount >= 250
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : 'bg-amber-100 text-amber-900 border border-amber-300'
+                    }`}
+                  >
+                    {wordCount >= 250 ? '✓ Đạt chuẩn 250 từ' : 'Minimum recommended: 250 words (Tối thiểu 250 từ)'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {lastSavedTime && (
+                    <span className="text-slate-400 text-[11px] hidden sm:inline">
+                      Lưu lúc: {lastSavedTime}
+                    </span>
+                  )}
+                  {isWritingActive && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSubmitConfirm(true)}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Nộp Bài (Submit)</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ========================================================= */
+          /* IELTS ACADEMIC WRITING TASK 1: DUAL-PANE LAYOUT (WITH CHARTS) */
+          /* ========================================================= */
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch min-h-[580px]">
+            {/* LEFT PANE: Task 1 Instructions, Question Prompt & Chart Image */}
+            <div className="bg-white rounded-2xl shadow-xs border border-slate-200 p-4 sm:p-5 flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-140px)]">
+              {/* Header info */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 gap-2">
+                <span className="px-2.5 py-1 text-xs font-bold rounded-lg uppercase tracking-wide border bg-blue-50 text-blue-800 border-blue-200">
+                  {categoryLabel}
+                </span>
+                <span className="text-xs text-slate-500 font-medium">
+                  Thời gian: {examDuration} phút • Tối thiểu: 150 từ
+                </span>
+              </div>
+
+              {/* IELTS Task 1 Standard Instructions Box */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-700 italic space-y-1">
+                <p>You should spend about <strong>{examDuration} minutes</strong> on this task.</p>
+                <p>Write at least <strong>150 words</strong>.</p>
+              </div>
+
+              {/* Question Prompt */}
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-1 text-blue-900">
+                  {assignment?.title}
+                </h2>
+                <p className="text-sm sm:text-base text-slate-800 leading-relaxed font-serif whitespace-pre-line">
+                  {assignment?.prompt_question || 'The chart below shows information about the topic. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.'}
+                </p>
+              </div>
+
+              {/* Uploaded Chart Image Display */}
+              {chartImages.length > 0 ? (
+                <div className="mt-1 flex-1 flex flex-col">
+                  <div className="text-xs font-semibold text-slate-500 mb-2 flex items-center justify-between">
+                    <span>Biểu đồ / Chart:</span>
+                    <span className="text-blue-600 text-[11px]">Bấm vào ảnh để phóng to</span>
+                  </div>
+                  <div className="space-y-3">
+                    {chartImages.map((imgUrl, idx) => (
+                      <div
+                        key={idx}
+                        className="relative group border border-slate-200 rounded-xl overflow-hidden bg-slate-50 p-2 text-center cursor-zoom-in hover:border-blue-400 transition-colors shadow-2xs"
+                        onClick={() => {
+                          setSelectedZoomImage(imgUrl);
+                          setShowImageZoom(true);
+                        }}
+                      >
+                        <img
+                          src={imgUrl}
+                          alt={`IELTS Chart ${idx + 1}`}
+                          className="max-h-[360px] w-auto mx-auto object-contain rounded-lg"
+                        />
+                        <button
+                          type="button"
+                          className="absolute bottom-3 right-3 px-2.5 py-1.5 bg-slate-900/80 hover:bg-slate-900 text-white text-xs font-medium rounded-lg flex items-center gap-1 shadow-md backdrop-blur-xs transition-opacity"
+                        >
+                          <ZoomIn className="w-3.5 h-3.5" />
+                          <span>Phóng to</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-6 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center text-xs text-slate-400">
+                  (Đề bài không đính kèm ảnh biểu đồ điện tử • Vui lòng quan sát đề phát trên lớp)
+                </div>
               )}
             </div>
 
-            {/* Question Prompt */}
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-1 text-blue-900">
-                {assignment?.title}
-              </h2>
-              <p className="text-sm sm:text-base text-slate-800 leading-relaxed font-serif whitespace-pre-line">
-                {assignment?.prompt_question || (isTask2 ? 'Give reasons for your answer and include any relevant examples from your own knowledge or experience.' : 'The chart below shows information about the topic. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.')}
-              </p>
-            </div>
-
-            {/* Uploaded Chart Image Display or Task 2 Essay Structure Guidance */}
-            {chartImages.length > 0 ? (
-              <div className="mt-1 flex-1 flex flex-col">
-                <div className="text-xs font-semibold text-slate-500 mb-2 flex items-center justify-between">
-                  <span>Biểu đồ / Chart:</span>
-                  <span className="text-blue-600 text-[11px]">Bấm vào ảnh để phóng to</span>
-                </div>
-                <div className="space-y-3">
-                  {chartImages.map((imgUrl, idx) => (
-                    <div
-                      key={idx}
-                      className="relative group border border-slate-200 rounded-xl overflow-hidden bg-slate-50 p-2 text-center cursor-zoom-in hover:border-blue-400 transition-colors shadow-2xs"
-                      onClick={() => {
-                        setSelectedZoomImage(imgUrl);
-                        setShowImageZoom(true);
-                      }}
-                    >
-                      <img
-                        src={imgUrl}
-                        alt={`IELTS Chart ${idx + 1}`}
-                        className="max-h-[360px] w-auto mx-auto object-contain rounded-lg"
-                      />
-                      <button
-                        type="button"
-                        className="absolute bottom-3 right-3 px-2.5 py-1.5 bg-slate-900/80 hover:bg-slate-900 text-white text-xs font-medium rounded-lg flex items-center gap-1 shadow-md backdrop-blur-xs transition-opacity"
-                      >
-                        <ZoomIn className="w-3.5 h-3.5" />
-                        <span>Phóng to</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : isTask2 ? (
-              <div className="mt-2 p-4 bg-gradient-to-br from-purple-50/70 to-indigo-50/50 rounded-2xl border border-purple-100/80">
-                <div className="flex items-center gap-2 text-xs font-bold text-purple-900 mb-2">
-                  <FileText className="w-4 h-4 text-purple-600" />
-                  <span>Gợi ý cấu trúc bài luận IELTS Writing Task 2 chuẩn:</span>
-                </div>
-                <ul className="text-xs text-slate-700 space-y-1.5 list-disc pl-4 leading-relaxed font-sans">
-                  <li><strong>Introduction:</strong> Mở bài bằng cách paraphrase lại câu hỏi đề thi và nêu rõ quan điểm / lập trường (Thesis Statement).</li>
-                  <li><strong>Body Paragraph 1:</strong> Luận điểm chính thứ nhất kèm lý lẽ giải thích sâu và ví dụ thực tế minh họa.</li>
-                  <li><strong>Body Paragraph 2:</strong> Luận điểm chính thứ hai kèm phân tích và dẫn chứng liên quan.</li>
-                  <li><strong>Conclusion:</strong> Kết luận tóm tắt lại các luận điểm trọng tâm và tái khẳng định quan điểm cuối cùng.</li>
-                </ul>
-              </div>
-            ) : (
-              <div className="p-6 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center text-xs text-slate-400">
-                (Đề bài không đính kèm ảnh biểu đồ điện tử • Vui lòng quan sát đề phát trên lớp)
-              </div>
-            )}
-          </div>
-
-          {/* RIGHT PANE: Writing Editor & Anti-Paste System */}
-          <div className="bg-white rounded-2xl shadow-xs border border-slate-200 p-4 sm:p-5 flex flex-col justify-between">
-            <div className="flex-1 flex flex-col">
-              <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100 text-xs">
-                <span className="font-bold text-slate-700 uppercase tracking-tight flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-blue-600" />
-                  <span>Khung Viết Bài / Writing Area</span>
-                </span>
-                <span className="text-slate-400 text-[11px]">
-                  {isWritingActive ? 'Đang bật tự động lưu • Chặn Paste' : 'Chế độ chỉ đọc'}
-                </span>
-              </div>
-
-              {/* Textarea */}
-              <textarea
-                value={content}
-                onChange={handleTextChange}
-                onPaste={handlePasteAttempt}
-                onBeforeInput={handleBeforeInput}
-                onKeyDown={handleKeyDown}
-                onCopy={handleCopyCut}
-                onCut={handleCopyCut}
-                onContextMenu={(e) => {
-                  if (isWritingActive) {
-                    e.preventDefault();
-                    showToast('⚠️ Menu ngữ cảnh chuột phải bị hạn chế trong phòng thi!');
-                  }
-                }}
-                onDrop={(e) => e.preventDefault()}
-                disabled={!isWritingActive}
-                placeholder={
-                  isWritingActive
-                    ? `Write your IELTS Academic ${isTask2 ? 'Task 2' : 'Task 1'} essay here...\n\n(Lưu ý: Không chuyển tab hoặc rời màn hình làm bài vì hệ thống sẽ lập tức HỦY bài thi).`
-                    : '(Bài viết đang ở chế độ xem lại / đã kết thúc)'
-                }
-                className={`flex-1 w-full min-h-[380px] p-3.5 text-slate-900 ielts-writing-textarea rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all ${
-                  !isWritingActive ? 'bg-slate-50 cursor-not-allowed opacity-90' : 'bg-white'
-                }`}
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-              />
-            </div>
-
-            {/* Bottom Status Bar */}
-            <div className="pt-3 mt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-              <div className="flex items-center gap-2">
-                <span className="font-black text-slate-900 text-sm tracking-tight">
-                  WORDS: {wordCount}
-                </span>
-                <span
-                  className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold ${
-                    wordCount >= minWords
-                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                      : 'bg-amber-100 text-amber-900 border border-amber-300'
-                  }`}
-                >
-                  {wordCount >= minWords ? `✓ Đạt chuẩn ${minWords} từ` : `Minimum recommended: ${minWords} words (Tối thiểu ${minWords} từ)`}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                {lastSavedTime && (
-                  <span className="text-slate-400 text-[11px] hidden sm:inline">
-                    Lưu lúc: {lastSavedTime}
+            {/* RIGHT PANE: Task 1 Writing Editor & Anti-Paste System */}
+            <div className="bg-white rounded-2xl shadow-xs border border-slate-200 p-4 sm:p-5 flex flex-col justify-between">
+              <div className="flex-1 flex flex-col">
+                <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-slate-100 text-xs">
+                  <span className="font-bold text-slate-700 uppercase tracking-tight flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    <span>Khung Viết Bài / Writing Area (Task 1)</span>
                   </span>
-                )}
-                {isWritingActive && (
-                  <button
-                    type="button"
-                    onClick={() => setShowSubmitConfirm(true)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                  <span className="text-slate-400 text-[11px]">
+                    {isWritingActive ? 'Đang bật tự động lưu • Chặn Paste' : 'Chế độ chỉ đọc'}
+                  </span>
+                </div>
+
+                {/* Textarea */}
+                <textarea
+                  value={content}
+                  onChange={handleTextChange}
+                  onPaste={handlePasteAttempt}
+                  onBeforeInput={handleBeforeInput}
+                  onKeyDown={handleKeyDown}
+                  onCopy={handleCopyCut}
+                  onCut={handleCopyCut}
+                  onContextMenu={(e) => {
+                    if (isWritingActive) {
+                      e.preventDefault();
+                      showToast('⚠️ Menu ngữ cảnh chuột phải bị hạn chế trong phòng thi!');
+                    }
+                  }}
+                  onDrop={(e) => e.preventDefault()}
+                  disabled={!isWritingActive}
+                  placeholder={
+                    isWritingActive
+                      ? "Write your IELTS Academic Task 1 essay here...\n\n(Lưu ý: Không chuyển tab hoặc rời màn hình làm bài vì hệ thống sẽ lập tức HỦY bài thi)."
+                      : "(Bài viết đang ở chế độ xem lại / đã kết thúc)"
+                  }
+                  className={`flex-1 w-full min-h-[380px] p-3.5 text-slate-900 ielts-writing-textarea rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all ${
+                    !isWritingActive ? 'bg-slate-50 cursor-not-allowed opacity-90' : 'bg-white'
+                  }`}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                />
+              </div>
+
+              {/* Bottom Status Bar for Task 1 */}
+              <div className="pt-3 mt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-slate-900 text-sm tracking-tight">
+                    WORDS: {wordCount}
+                  </span>
+                  <span
+                    className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold ${
+                      wordCount >= 150
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : 'bg-amber-100 text-amber-900 border border-amber-300'
+                    }`}
                   >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Nộp Bài (Submit)</span>
-                  </button>
-                )}
+                    {wordCount >= 150 ? '✓ Đạt chuẩn 150 từ' : 'Minimum recommended: 150 words (Tối thiểu 150 từ)'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {lastSavedTime && (
+                    <span className="text-slate-400 text-[11px] hidden sm:inline">
+                      Lưu lúc: {lastSavedTime}
+                    </span>
+                  )}
+                  {isWritingActive && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSubmitConfirm(true)}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Nộp Bài (Submit)</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Disclaimer / Browser limitations note */}
         <div className="text-center text-[11px] text-slate-400 py-1">
@@ -1104,15 +1263,13 @@ export default function StudentWriting({ assignmentId, student: initialStudent, 
 
               {/* Action Buttons */}
               <div className="pt-2 flex gap-3">
-                {onSelectAssignment && (
-                  <button
-                    type="button"
-                    onClick={onSelectAssignment}
-                    className="w-1/3 py-3 border border-slate-300 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-50 cursor-pointer"
-                  >
-                    Quay lại
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleGoBack}
+                  className="w-1/3 py-3 border border-slate-300 text-slate-700 font-bold rounded-xl text-sm hover:bg-slate-50 cursor-pointer"
+                >
+                  Quay lại
+                </button>
                 <button
                   type="submit"
                   disabled={!hasAgreedRules || startingDirectExam}
