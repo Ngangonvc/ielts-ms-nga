@@ -207,13 +207,13 @@ export const TASK_1_CATEGORIES = {
   MIXED: 'Biểu đồ kết hợp (Mixed / Multiple Charts)'
 };
 
-// IELTS Task 2 Category Vietnamese Labels
+// IELTS Task 2 Category Labels
 export const TASK_2_CATEGORIES = {
-  OPINION: 'Ý kiến (Opinion / Agree or Disagree)',
-  DISCUSSION: 'Thảo luận 2 quan điểm (Discuss Both Views)',
-  ADVANTAGES_DISADVANTAGES: 'Ưu điểm & Nhược điểm (Advantages & Disadvantages)',
-  PROBLEM_SOLUTION: 'Nguyên nhân & Giải pháp (Problems / Causes & Solutions)',
-  TWO_PART: 'Câu hỏi 2 phần (Two-Part Question)'
+  OPINION: 'Opinion Essay (Agree/Disagree)',
+  DISCUSSION: 'Discussion Essay (Discuss Both Views)',
+  ADVANTAGES_DISADVANTAGES: 'Advantages and Disadvantages',
+  PROBLEM_SOLUTION: 'Problems and Solutions',
+  TWO_PART: 'Two-part Questions'
 };
 
 export const TASK_TYPES = {

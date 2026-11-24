@@ -5,6 +5,8 @@ import {
   BookOpen,
   Users,
   FileText,
+  BarChart3,
+  PenTool,
   ShieldAlert,
   Download,
   Plus,
@@ -700,194 +702,328 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
         </div>
 
         {/* Create Writing Session Form */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-4">
-          {/* Task 1 / Task 2 Selector Tabs */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-600">Phần thi:</span>
-              <div className="inline-flex p-1 bg-slate-100 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => handleSwitchNewTaskType('TASK_1')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    newTaskType === 'TASK_1'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  📊 Task 1 (20 phút • 150 từ)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSwitchNewTaskType('TASK_2')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    newTaskType === 'TASK_2'
-                      ? 'bg-purple-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  📝 Task 2 (40 phút • 250 từ)
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowDetailedCreate(!showDetailedCreate)}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
-            >
-              <span>{showDetailedCreate ? 'Thu gọn tùy chọn' : (newTaskType === 'TASK_2' ? 'Câu hỏi chi tiết & Tùy chọn' : 'Đề thi chi tiết & Đính kèm ảnh biểu đồ')}</span>
-              {showDetailedCreate ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs space-y-5">
+          {/* Section Header */}
+          <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+            <span className="p-2.5 bg-blue-100 text-blue-700 rounded-xl">
+              <BookOpen className="w-5 h-5" />
+            </span>
             <div>
-              <h2 className={`text-base sm:text-lg font-extrabold flex items-center gap-2 ${newTaskType === 'TASK_2' ? 'text-purple-900' : 'text-blue-900'}`}>
-                <BookOpen className={`w-5 h-5 ${newTaskType === 'TASK_2' ? 'text-purple-600' : 'text-blue-600'}`} />
-                <span>Tạo Đề Thi IELTS Academic Writing {newTaskType === 'TASK_2' ? 'Task 2' : 'Task 1'}</span>
+              <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight uppercase">
+                TẠO ĐỀ THI IELTS WRITING
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                {newTaskType === 'TASK_2'
-                  ? 'Nhập câu hỏi bài luận Task 2 (Opinion, Discussion,...) và phát link/mã QR cho học sinh làm bài trong 40 phút.'
-                  : 'Nhập đề bài, tải ảnh biểu đồ và phát link/mã QR cho học sinh làm bài trong 20 phút.'}
+                Vui lòng chọn phần thi Task 1 hoặc Task 2 trước khi khởi tạo đề thi mới cho học sinh
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-            <div className="md:col-span-4">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {newTaskType === 'TASK_2' ? 'Chủ đề / Tên bài luận Task 2' : 'Tên buổi thi / Đề bài Task 1'}
-              </label>
-              <input
-                type="text"
-                placeholder={newTaskType === 'TASK_2' ? 'Ví dụ: Technology and Education in University' : 'Ví dụ: Line Graph - Life Expectancy (1950 - 2020)'}
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+          {/* TWO CLEAR SELECTION BUTTONS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {/* BUTTON 1: WRITING TASK 1 – 20 MINUTES */}
+            <button
+              type="button"
+              onClick={() => handleSwitchNewTaskType('TASK_1')}
+              className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-start gap-3.5 ${
+                newTaskType === 'TASK_1'
+                  ? 'border-blue-600 bg-blue-50/90 shadow-sm ring-2 ring-blue-200'
+                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
+              }`}
+            >
+              <div className={`p-2.5 rounded-xl ${newTaskType === 'TASK_1' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                <BarChart3 className="w-6 h-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className={`font-black text-sm sm:text-base tracking-tight ${newTaskType === 'TASK_1' ? 'text-blue-900' : 'text-slate-900'}`}>
+                    WRITING TASK 1 – 20 MINUTES
+                  </span>
+                  {newTaskType === 'TASK_1' && (
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Miêu tả biểu đồ (Line, Bar, Pie, Table, Process, Map) • Thời gian 20 phút • Tối thiểu 150 từ • Hỗ trợ tải ảnh biểu đồ
+                </p>
+              </div>
+            </button>
 
-            <div className="md:col-span-3">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {newTaskType === 'TASK_2' ? 'Dạng bài Task 2' : 'Dạng biểu đồ Task 1'}
-              </label>
-              <select
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 font-medium"
-              >
-                {Object.entries(newTaskType === 'TASK_2' ? TASK_2_CATEGORIES : TASK_1_CATEGORIES).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="md:col-span-3">
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Chọn lớp thi</label>
-              <select
-                value={newClassId}
-                onChange={(e) => setNewClassId(e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-500"
-              >
-                {classes.length === 0 ? (
-                  <option value="">Chưa có lớp nào</option>
-                ) : (
-                  classes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.student_count || 0} HS)
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-
-            <div className="md:col-span-2 flex gap-2">
-              <button
-                type="button"
-                disabled={creatingSession || classes.length === 0}
-                onClick={() => handleCreateSession(true)}
-                className={`w-full py-2.5 px-3 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50 ${
-                  newTaskType === 'TASK_2' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'
-                }`}
-              >
-                {creatingSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                <span>Bắt đầu thi</span>
-              </button>
-            </div>
+            {/* BUTTON 2: WRITING TASK 2 – 40 MINUTES */}
+            <button
+              type="button"
+              onClick={() => handleSwitchNewTaskType('TASK_2')}
+              className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-start gap-3.5 ${
+                newTaskType === 'TASK_2'
+                  ? 'border-purple-600 bg-purple-50/90 shadow-sm ring-2 ring-purple-200'
+                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
+              }`}
+            >
+              <div className={`p-2.5 rounded-xl ${newTaskType === 'TASK_2' ? 'bg-purple-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                <PenTool className="w-6 h-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className={`font-black text-sm sm:text-base tracking-tight ${newTaskType === 'TASK_2' ? 'text-purple-900' : 'text-slate-900'}`}>
+                    WRITING TASK 2 – 40 MINUTES
+                  </span>
+                  {newTaskType === 'TASK_2' && (
+                    <span className="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Bài luận nghị luận xã hội (Opinion, Discussion,...) • Thời gian 40 phút • Tối thiểu 250 từ • Không cần biểu đồ
+                </p>
+              </div>
+            </button>
           </div>
 
-          {/* Detailed Question Prompt & Image Upload Area */}
-          {showDetailedCreate && (
-            <div className="pt-3 border-t border-slate-100 space-y-3">
+          {/* DEDICATED EXAM CREATION FORM */}
+          {newTaskType === 'TASK_1' ? (
+            /* ========================================================= */
+            /* TASK 1 FORM: WITH CHART UPLOAD & 20-MINUTE SPEC           */
+            /* ========================================================= */
+            <div className="p-4 sm:p-5 rounded-2xl bg-blue-50/40 border border-blue-200/80 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-blue-100">
+                <span className="text-xs font-black uppercase tracking-wide text-blue-900 bg-blue-100 px-3 py-1 rounded-lg">
+                  Soạn Đề Thi: IELTS Academic Writing Task 1
+                </span>
+                <span className="text-xs text-blue-800 font-semibold">
+                  Quy chuẩn: <strong>20 phút</strong> • Tối thiểu: <strong>150 từ</strong>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                {/* Title */}
+                <div className="md:col-span-5">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Tên đề thi / Tiêu đề biểu đồ Task 1 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: Line Graph - Life Expectancy (1950 - 2020)"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Chart Category */}
+                <div className="md:col-span-4">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Dạng biểu đồ Task 1
+                  </label>
+                  <select
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  >
+                    {Object.entries(TASK_1_CATEGORIES).map(([key, label]) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Class Selection */}
+                <div className="md:col-span-3">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Chọn lớp thi <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newClassId}
+                    onChange={(e) => setNewClassId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  >
+                    {classes.length === 0 ? (
+                      <option value="">Chưa có lớp nào</option>
+                    ) : (
+                      classes.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.student_count || 0} HS)
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              {/* Prompt Question */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Đề bài câu hỏi ({newTaskType === 'TASK_2' ? 'Essay Question Prompt' : 'Question Prompt'})
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Đề bài câu hỏi (Writing Question Prompt)
                 </label>
                 <textarea
-                  rows={newTaskType === 'TASK_2' ? 3 : 2}
+                  rows={2}
                   value={newPromptQuestion}
                   onChange={(e) => setNewPromptQuestion(e.target.value)}
-                  placeholder={
-                    newTaskType === 'TASK_2'
-                      ? 'Some people believe that unpaid community service should be a compulsory part of high school programmes. To what extent do you agree or disagree? Give reasons for your answer and include any relevant examples from your own knowledge or experience.'
-                      : 'The chart below shows information about... Summarise the information by selecting and reporting the main features, and make comparisons where relevant.'
-                  }
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 font-serif"
+                  placeholder="The chart below shows information about... Summarise the information by selecting and reporting the main features, and make comparisons where relevant."
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 font-serif"
                 />
               </div>
 
-              {newTaskType === 'TASK_1' && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                    <span>Tải lên ảnh biểu đồ Task 1 (Bar, Line, Pie, Table, Process, Map, Mixed)</span>
-                    <span className="text-slate-400 text-[11px]">Hỗ trợ JPG, PNG, WEBP, SVG tối đa 10MB</span>
+              {/* Chart Image Upload */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Tải lên ảnh biểu đồ Task 1 (Bar, Line, Pie, Table, Process, Map, Mixed)</span>
+                  <span className="text-slate-400 text-[11px] font-normal">Hỗ trợ JPG, PNG, WEBP, SVG tối đa 10MB</span>
+                </label>
+                <input
+                  type="file"
+                  multiple
+                  accept=".jpg,.jpeg,.png,.webp,.svg"
+                  onChange={handleChartFilesChange}
+                  className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
+                />
+
+                {chartPreviews.length > 0 && (
+                  <div className="mt-2.5 flex flex-wrap gap-2.5">
+                    {chartPreviews.map((url, i) => (
+                      <div key={i} className="relative w-24 h-24 border border-blue-200 rounded-xl overflow-hidden bg-white p-1 shadow-xs">
+                        <img src={url} alt="Preview" className="w-full h-full object-contain" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-blue-200/60">
+                <span className="text-xs text-slate-600">
+                  Thời gian làm bài: <strong>20 phút</strong> • Tự động đếm ngược & nộp bài khi hết giờ
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={creatingSession || classes.length === 0}
+                    onClick={() => handleCreateSession(false)}
+                    className="px-4 py-2.5 border border-slate-300 hover:bg-white text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                  >
+                    Lưu Bản Nháp (DRAFT)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={creatingSession || classes.length === 0}
+                    onClick={() => handleCreateSession(true)}
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    {creatingSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                    <span>BẮT ĐẦU THI / PHÁT ĐỀ (PUBLISHED)</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* ========================================================= */
+            /* TASK 2 FORM: NO CHARTS, ESSAY TYPES & 40-MINUTE SPEC      */
+            /* ========================================================= */
+            <div className="p-4 sm:p-5 rounded-2xl bg-purple-50/40 border border-purple-200/80 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-purple-100">
+                <span className="text-xs font-black uppercase tracking-wide text-purple-900 bg-purple-100 px-3 py-1 rounded-lg">
+                  Soạn Đề Thi: IELTS Academic Writing Task 2
+                </span>
+                <span className="text-xs text-purple-800 font-semibold">
+                  Quy chuẩn: <strong>40 phút</strong> • Tối thiểu: <strong>250 từ</strong> (Không sử dụng biểu đồ)
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                {/* Title */}
+                <div className="md:col-span-5">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Chủ đề / Tên bài luận Task 2 <span className="text-red-500">*</span>
                   </label>
                   <input
-                    type="file"
-                    multiple
-                    accept=".jpg,.jpeg,.png,.webp,.svg"
-                    onChange={handleChartFilesChange}
-                    className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                    type="text"
+                    placeholder="Ví dụ: Technology and Education: Will AI Replace Teachers?"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500"
                   />
-
-                  {chartPreviews.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {chartPreviews.map((url, i) => (
-                        <div key={i} className="relative w-20 h-20 border border-slate-200 rounded-lg overflow-hidden bg-slate-50 p-1">
-                          <img src={url} alt="Preview" className="w-full h-full object-contain" />
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
-              )}
+
+                {/* Essay Question Type */}
+                <div className="md:col-span-4">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Dạng bài luận Task 2 (Essay Question Type)
+                  </label>
+                  <select
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500 font-medium"
+                  >
+                    {Object.entries(TASK_2_CATEGORIES).map(([key, label]) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Class Selection */}
+                <div className="md:col-span-3">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Chọn lớp thi <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newClassId}
+                    onChange={(e) => setNewClassId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500 font-medium"
+                  >
+                    {classes.length === 0 ? (
+                      <option value="">Chưa có lớp nào</option>
+                    ) : (
+                      classes.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.student_count || 0} HS)
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              {/* Full Writing Question */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Đề bài câu hỏi đầy đủ (Full Writing Question) <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={newPromptQuestion}
+                  onChange={(e) => setNewPromptQuestion(e.target.value)}
+                  placeholder="Some people believe that artificial intelligence will replace teachers in the future. To what extent do you agree or disagree? Give reasons for your answer and include any relevant examples from your own knowledge or experience."
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500 font-serif leading-relaxed"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-purple-200/60">
+                <span className="text-xs text-slate-600">
+                  Thời gian làm bài: <strong>40 phút</strong> • Tối thiểu <strong>250 từ</strong> • Tự động đếm ngược & nộp bài khi hết giờ
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={creatingSession || classes.length === 0}
+                    onClick={() => handleCreateSession(false)}
+                    className="px-4 py-2.5 border border-slate-300 hover:bg-white text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                  >
+                    Lưu Bản Nháp (DRAFT)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={creatingSession || classes.length === 0}
+                    onClick={() => handleCreateSession(true)}
+                    className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md flex items-center gap-1.5 cursor-pointer transition-all"
+                  >
+                    {creatingSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                    <span>BẮT ĐẦU THI / PHÁT ĐỀ (PUBLISHED)</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
-
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-slate-500">Thời gian quy chuẩn {newTaskType === 'TASK_2' ? 'Task 2' : 'Task 1'}:</span>
-              <span className={`px-2.5 py-1 rounded-lg font-bold border ${
-                newTaskType === 'TASK_2'
-                  ? 'bg-purple-100 text-purple-800 border-purple-200'
-                  : 'bg-blue-100 text-blue-800 border-blue-200'
-              }`}>
-                {newTaskType === 'TASK_2' ? '40 phút • Tối thiểu 250 từ' : '20 phút • Tối thiểu 150 từ'}
-              </span>
-            </div>
-            <button
-              type="button"
-              disabled={creatingSession || classes.length === 0}
-              onClick={() => handleCreateSession(false)}
-              className="text-xs font-semibold text-slate-600 hover:text-blue-600 underline cursor-pointer"
-            >
-              Lưu bản nháp đề thi (chưa mở cho học sinh)
-            </button>
-          </div>
         </div>
 
         {/* Writing Sessions List */}
