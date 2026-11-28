@@ -649,7 +649,7 @@ app.get('/api/assignments', authenticateTeacher, (req, res) => {
   let sql = `
     SELECT a.*, c.name as class_name,
       (SELECT COUNT(*) FROM attempts att WHERE att.assignment_id = a.id) as attempt_count,
-      (SELECT COUNT(*) FROM attempts att WHERE att.assignment_id = a.id AND att.status = 'SUBMITTED') as submitted_count,
+      (SELECT COUNT(*) FROM attempts att WHERE att.assignment_id = a.id AND att.status IN ('SUBMITTED', 'AUTO-SUBMITTED')) as submitted_count,
       (SELECT COUNT(*) FROM attempts att WHERE att.assignment_id = a.id AND att.status = 'IN_PROGRESS') as active_attempt_count
     FROM assignments a
     JOIN classes c ON a.class_id = c.id
@@ -1828,16 +1828,22 @@ app.get('/api/teacher/submissions', authenticateTeacher, (req, res) => {
   const params = [];
 
   if (classId) {
-    sql += ' AND s.class_id = ?';
-    params.push(classId);
+    sql += ' AND (s.class_id = ? OR a.class_id = ?)';
+    params.push(classId, classId);
   }
   if (assignmentId) {
     sql += ' AND a.id = ?';
     params.push(assignmentId);
   }
   if (status) {
-    sql += ' AND att.status = ?';
-    params.push(status);
+    if (status === 'SUBMITTED') {
+      sql += " AND att.status IN ('SUBMITTED', 'AUTO-SUBMITTED')";
+    } else if (status === 'CANCELLED' || status === 'INVALIDATED') {
+      sql += " AND att.status IN ('CANCELLED', 'INVALIDATED')";
+    } else {
+      sql += ' AND att.status = ?';
+      params.push(status);
+    }
   }
   if (selectedType) {
     sql += ' AND (a.type = ? OR a.task_type = ?)';
@@ -2098,18 +2104,24 @@ app.get('/api/teacher/export/zip', authenticateTeacher, async (req, res) => {
     const params = [];
 
     if (classId) {
-      sql += ' AND s.class_id = ?';
-      params.push(classId);
+      sql += ' AND (s.class_id = ? OR a.class_id = ?)';
+      params.push(classId, classId);
     }
     if (assignmentId) {
       sql += ' AND a.id = ?';
       params.push(assignmentId);
     }
     if (status) {
-      sql += ' AND att.status = ?';
-      params.push(status);
+      if (status === 'SUBMITTED') {
+        sql += " AND att.status IN ('SUBMITTED', 'AUTO-SUBMITTED')";
+      } else if (status === 'CANCELLED' || status === 'INVALIDATED') {
+        sql += " AND att.status IN ('CANCELLED', 'INVALIDATED')";
+      } else {
+        sql += ' AND att.status = ?';
+        params.push(status);
+      }
     } else {
-      sql += " AND att.status IN ('SUBMITTED', 'CANCELLED', 'EXPIRED', 'IN_PROGRESS')";
+      sql += " AND att.status IN ('SUBMITTED', 'AUTO-SUBMITTED', 'CANCELLED', 'INVALIDATED', 'EXPIRED', 'IN_PROGRESS')";
     }
     if (selectedType) {
       sql += ' AND (a.type = ? OR a.task_type = ?)';
@@ -2159,6 +2171,9 @@ app.get('/api/teacher/export/zip', authenticateTeacher, async (req, res) => {
       'Content-Disposition',
       `attachment; filename="${zipFilename}"; filename*=UTF-8''${encodeURIComponent(zipFilename)}`
     );
+    res.setHeader('X-Total-Count', records.length.toString());
+    res.setHeader('X-Export-Count', records.length.toString());
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Total-Count, X-Export-Count');
     res.send(zipBuffer);
   } catch (err) {
     console.error('Export ZIP error:', err);
@@ -2167,7 +2182,7 @@ app.get('/api/teacher/export/zip', authenticateTeacher, async (req, res) => {
 });
 
 app.get('/api/teacher/export/excel', authenticateTeacher, (req, res) => {
-  const { classId, assignmentId, taskType, type } = req.query;
+  const { classId, assignmentId, taskType, type, status } = req.query;
   const selectedType = (taskType || type || '').toUpperCase();
 
   let sql = `
@@ -2188,8 +2203,8 @@ app.get('/api/teacher/export/excel', authenticateTeacher, (req, res) => {
   `;
   const params = [];
   if (classId) {
-    sql += ' AND s.class_id = ?';
-    params.push(classId);
+    sql += ' AND (s.class_id = ? OR a.class_id = ?)';
+    params.push(classId, classId);
   }
   if (assignmentId) {
     sql += ' AND a.id = ?';
@@ -2199,6 +2214,16 @@ app.get('/api/teacher/export/excel', authenticateTeacher, (req, res) => {
     sql += ' AND (a.type = ? OR a.task_type = ?)';
     params.push(selectedType, selectedType);
   }
+  if (status) {
+    if (status === 'SUBMITTED') {
+      sql += " AND att.status IN ('SUBMITTED', 'AUTO-SUBMITTED')";
+    } else if (status === 'CANCELLED' || status === 'INVALIDATED') {
+      sql += " AND att.status IN ('CANCELLED', 'INVALIDATED')";
+    } else {
+      sql += ' AND att.status = ?';
+      params.push(status);
+    }
+  }
   sql += ' ORDER BY c.name ASC, s.full_name ASC';
 
   const rows = query(sql, params);
@@ -2207,6 +2232,9 @@ app.get('/api/teacher/export/excel', authenticateTeacher, (req, res) => {
   const fileLabel = selectedType === 'TASK_2' ? 'Task_2' : (selectedType === 'TASK_1' ? 'Task_1' : 'Writing');
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="Ket_Qua_IELTS_${fileLabel}.xlsx"`);
+  res.setHeader('X-Total-Count', rows.length.toString());
+  res.setHeader('X-Export-Count', rows.length.toString());
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, X-Total-Count, X-Export-Count');
   res.send(buffer);
 });
 

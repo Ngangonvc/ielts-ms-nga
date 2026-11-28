@@ -211,7 +211,7 @@ function generateSubmissionsExcel(submissions, title = 'Danh_sach_bai_nop') {
     if (timeSpentSec === undefined || timeSpentSec === null) {
       if (s.start_time && s.submitted_at) {
         timeSpentSec = Math.max(0, Math.round((s.submitted_at - s.start_time) / 1000));
-      } else if (s.start_time && s.last_saved_at && (s.status === 'INVALIDATED' || s.status === 'CANCELLED')) {
+      } else if (s.start_time && s.last_saved_at && (['INVALIDATED', 'CANCELLED', 'AUTO-SUBMITTED'].includes(s.status))) {
         timeSpentSec = Math.max(0, Math.round((s.last_saved_at - s.start_time) / 1000));
       }
     }

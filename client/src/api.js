@@ -154,6 +154,8 @@ export async function downloadTeacherFile(endpoint, fallbackFilename = 'download
 
   const contentType = res.headers.get('content-type') || '';
   const contentDisp = res.headers.get('content-disposition') || '';
+  const countHeader = res.headers.get('x-export-count') || res.headers.get('x-total-count');
+  const count = countHeader ? parseInt(countHeader, 10) : null;
   let resolvedFilename = fallbackFilename;
   const utf8Match = contentDisp.match(/filename\*=UTF-8''([^;]+)/i);
   const plainMatch = contentDisp.match(/filename="([^"]+)"/i);
@@ -171,7 +173,7 @@ export async function downloadTeacherFile(endpoint, fallbackFilename = 'download
   if (contentType.includes('text/html')) {
     window.open(blobUrl, '_blank', 'noopener,noreferrer');
     setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
-    return;
+    return { filename: resolvedFilename, count };
   }
 
   const a = document.createElement('a');
@@ -181,6 +183,7 @@ export async function downloadTeacherFile(endpoint, fallbackFilename = 'download
   a.click();
   a.remove();
   setTimeout(() => window.URL.revokeObjectURL(blobUrl), 10000);
+  return { filename: resolvedFilename, count };
 }
 
 // Client word counter strictly matching backend IELTS standard

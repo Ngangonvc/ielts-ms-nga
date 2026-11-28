@@ -567,14 +567,18 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
       if (selectedClassId) params.set('classId', selectedClassId);
       if (selectedAssignmentId) params.set('assignmentId', selectedAssignmentId);
       if (selectedTaskType) params.set('taskType', selectedTaskType);
+      if (submissionFilterStatus) params.set('status', submissionFilterStatus);
       const queryStr = params.toString() ? `?${params.toString()}` : '';
       const zipName = selectedTaskType === 'TASK_2'
         ? 'Tat_Ca_Bai_Writing_Task_2.zip'
         : selectedTaskType === 'TASK_1'
         ? 'Tat_Ca_Bai_Writing_Task_1.zip'
         : 'Tat_Ca_Bai_Writing_IELTS.zip';
-      await downloadTeacherFile(`/teacher/export/zip${queryStr}`, zipName);
-      showNotification('success', 'Đã tải thành công file nén ZIP chứa tất cả bài viết Word (.docx)!');
+      const res = await downloadTeacherFile(`/teacher/export/zip${queryStr}`, zipName);
+      const countMsg = (res && typeof res.count === 'number')
+        ? ` (Đã xuất thành công ${res.count} bài viết)`
+        : '';
+      showNotification('success', `Đã tải thành công file nén ZIP chứa bài viết Word (.docx)!${countMsg}`);
     } catch (err) {
       showNotification('error', 'Không thể tải file ZIP: ' + err.message);
     }
@@ -587,14 +591,18 @@ export default function TeacherDashboard({ teacher, onTeacherUpdated, onLogout, 
       if (selectedClassId) params.set('classId', selectedClassId);
       if (selectedAssignmentId) params.set('assignmentId', selectedAssignmentId);
       if (selectedTaskType) params.set('taskType', selectedTaskType);
+      if (submissionFilterStatus) params.set('status', submissionFilterStatus);
       const queryStr = params.toString() ? `?${params.toString()}` : '';
       const excelName = selectedTaskType === 'TASK_2'
         ? 'Ket_Qua_IELTS_Task_2.xlsx'
         : selectedTaskType === 'TASK_1'
         ? 'Ket_Qua_IELTS_Task_1.xlsx'
         : 'Ket_Qua_IELTS_Ms_Nga.xlsx';
-      await downloadTeacherFile(`/teacher/export/excel${queryStr}`, excelName);
-      showNotification('success', 'Đã xuất bảng kết quả Excel (.xlsx) thành công!');
+      const res = await downloadTeacherFile(`/teacher/export/excel${queryStr}`, excelName);
+      const countMsg = (res && typeof res.count === 'number')
+        ? ` (Đã xuất thành công ${res.count} bài làm)`
+        : '';
+      showNotification('success', `Đã xuất bảng kết quả Excel (.xlsx) thành công!${countMsg}`);
     } catch (err) {
       showNotification('error', 'Lỗi xuất Excel: ' + err.message);
     } finally {
